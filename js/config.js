@@ -12,7 +12,7 @@ export const CONFIG = {
 
     // Waar staat de cursistenpagina? Laat leeg voor de standaard: de map "kijk/" naast deze pagina.
     // Alleen invullen als de cursistenpagina op een ander adres staat, bv. 'https://ligolimino.github.io/kijk/'.
-    kijkAdres: '',
+    kijkAdres: 'https://nederlandsoefenen.github.io/nt2/',
 
     // Microsoft-login (optioneel). Alleen nodig als in de sheet "Login verplicht = ja" staat.
     // Deze twee codes krijg je van Ligo-IT na de app-registratie (zie handleiding "Login").
