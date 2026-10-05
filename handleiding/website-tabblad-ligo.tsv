@@ -1,0 +1,8 @@
+Actief	Collectie	Tabblad	Koprij	Titelkolom	Linkkolom	Insluitkolom	Omschrijvingkolom	Filters	Op-website-kolom	Vrij-te-delen-kolom
+ja	Oefeningen	Oefeningen	4	Titel	URL		Korte omschrijving	Thema; Niveau; Vaardigheid	Op website	Vrij te delen
+ja	PJM video's	PJM	1	Naam	Video-url			Thema; Sterren=Niveau	Op website	Video vrij te delen
+ja	PJM Canva	PJM	1	Naam	URL canva met audio			Thema; Sterren=Niveau	Op website	Canva vrij te delen
+ja	PJM onthoudbladen	PJM	1	Naam	Onthoudblad			Thema; Sterren=Niveau	Op website	
+ja	Audio	Audio	5	Titel	URL	Verbeterde insluitcode	Korte omschrijving	Thema; Niveau; Type (track / afspeellijst)=Type	Op website	Vrij te delen
+ja	VLL losse bladzijden	Linken losse blz VLL	1	Wat	URL			Kern; Boekje; Soort boekje	Op website	Vrij te delen
+ja	Offline documenten	Offline documenten (onder const	4	Titel	Titel			Soort; Instantie; context=Context	Op website	

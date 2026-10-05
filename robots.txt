@@ -1,0 +1,16 @@
+# Deze website hoort niet in zoekmachines.
+#
+# De twee webpagina's (index.html en kijk/) hebben zelf al <meta name="robots" content="noindex">.
+# Zoekmachines moeten die pagina's kunnen openen om dat te zien, dus die blijven hier toegelaten.
+# Alle andere bestanden (handleidingen, code, tests) hebben zo'n label niet: die sluiten we hier uit.
+
+User-agent: *
+Disallow: /handleiding/
+Disallow: /backend/
+Disallow: /apps-script/
+Disallow: /tests/
+Disallow: /tools/
+Disallow: /lib/
+Disallow: /js/
+Disallow: /css/
+Disallow: /README.md

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- Niet tonen in zoekmachines. (Dit houdt mensen niet tegen; daarvoor dient de login.) -->
+    <meta name="robots" content="noindex, nofollow">
+    <title>Digitale oefeningen</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+    <link rel="stylesheet" href="css/stijl.css">
+    <!-- Alle code staat in js/. "type=module" laat de bestanden elkaar importeren. -->
+    <script type="module" src="js/lesgevers.js"></script>
+</head>
+<body class="lesgevers">
+
+    <header class="bovenbalk">
+        <div class="merk">
+            <span class="merk-logo" aria-hidden="true">▶</span>
+            <div>
+                <p class="merk-titel" id="site-titel">Digitale oefeningen</p>
+                <p class="merk-ondertitel" id="site-ondertitel"></p>
+            </div>
+        </div>
+        <div class="gebruiker" id="gebruiker" hidden>
+            <span id="gebruiker-naam"></span>
+            <button type="button" class="knop knop-licht" id="uitloggen">Uitloggen</button>
+        </div>
+    </header>
+
+    <main class="pagina">
+
+        <section class="hero" aria-labelledby="hero-titel">
+            <div class="hero-tekst">
+                <p class="hero-boventitel">Voor lesgevers</p>
+                <h1 id="hero-titel">Wat zoek je vandaag?</h1>
+                <div class="snelkeuze" id="snelkeuze" aria-label="Snelkeuze"></div>
+            </div>
+            <div class="zoekveld">
+                <label for="zoek" class="verborgen">Zoeken</label>
+                <span class="zoek-icoon" aria-hidden="true"></span>
+                <input type="search" id="zoek" placeholder="Zoek op titel, thema of woord…" autocomplete="off">
+            </div>
+        </section>
+
+        <nav class="collecties" id="collecties" aria-label="Collecties"></nav>
+
+        <div class="inhoud">
+            <aside class="zijbalk" id="zijbalk" aria-labelledby="filters-titel">
+                <div class="zijbalk-kop">
+                    <h2 id="filters-titel">Verfijn je keuze</h2>
+                    <button type="button" class="tekstknop" id="wis-filters">Wis filters</button>
+                </div>
+                <div id="filters"></div>
+            </aside>
+
+            <section class="resultaten" aria-labelledby="resultaten-titel">
+                <div class="resultaten-kop">
+                    <div>
+                        <p class="aantal" id="aantal" aria-live="polite"></p>
+                        <h2 id="resultaten-titel">Alle oefeningen</h2>
+                    </div>
+                    <div class="resultaten-acties">
+                        <button type="button" class="knop knop-licht filters-knop" id="filters-knop" aria-controls="zijbalk" aria-expanded="false">Filters</button>
+                        <label class="sorteer">
+                            <span>Sorteren</span>
+                            <select id="sorteer">
+                                <option value="lijst">Volgorde van de lijst</option>
+                                <option value="az">Titel A–Z</option>
+                                <option value="za">Titel Z–A</option>
+                            </select>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="status" id="status" role="status"></div>
+                <div class="raster" id="kaarten"></div>
+                <div class="meer" id="meer"></div>
+            </section>
+        </div>
+    </main>
+
+    <!-- Venster om een video, audio of e-learning af te spelen -->
+    <dialog class="venster spelervenster" id="spelervenster" aria-labelledby="speler-titel">
+        <div class="venster-kop">
+            <h2 id="speler-titel"></h2>
+            <button type="button" class="knop-icoon" id="speler-sluit" aria-label="Sluiten"></button>
+        </div>
+        <div class="speler-kader" id="speler-kader">
+            <div id="speler"></div>
+        </div>
+        <div class="speler-knoppen">
+            <button type="button" class="knop knop-licht" id="speler-scherm">Volledig scherm</button>
+            <a class="knop knop-licht" id="speler-open" target="_blank" rel="noopener" hidden>Open in nieuw venster</a>
+            <button type="button" class="knop knop-deel-tekst" id="speler-deel" hidden>Deel met cursisten</button>
+        </div>
+    </dialog>
+
+</body>
+</html>
