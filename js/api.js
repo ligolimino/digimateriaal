@@ -5,10 +5,22 @@
  */
 import { CONFIG } from './config.js';
 
+/**
+ * Welke lijst? Staat in het adres als ?lijst=<code> (zie handleiding 9).
+ * Zonder ?lijst= toont de website de eigen gegevens van de sheet.
+ */
+const LIJST = (new URLSearchParams(window.location.search).get('lijst') || '').trim();
+
+export function huidigeLijst() {
+    return LIJST;
+}
+
 export class ApiFout extends Error {
-    constructor(bericht, loginNodig = false) {
+    constructor(bericht, loginNodig = false, extra = {}) {
         super(bericht);
         this.loginNodig = loginNodig;
+        this.details = extra.details || [];
+        this.code = extra.code || '';
     }
 }
 
@@ -22,6 +34,10 @@ async function vraag(parameters, postGegevens = null) {
     controleerConfig();
     const adres = new URL(CONFIG.backendUrl);
     Object.entries(parameters).forEach(([k, v]) => adres.searchParams.set(k, v));
+    if (LIJST) {
+        adres.searchParams.set('lijst', LIJST);
+        if (postGegevens) postGegevens = { ...postGegevens, lijst: LIJST };
+    }
 
     let antwoord;
     try {
@@ -42,7 +58,7 @@ async function vraag(parameters, postGegevens = null) {
     }
     const gegevens = await antwoord.json();
     if (!gegevens.ok) {
-        throw new ApiFout(gegevens.fout || 'Onbekende fout.', Boolean(gegevens.loginNodig));
+        throw new ApiFout(gegevens.fout || 'Onbekende fout.', Boolean(gegevens.loginNodig), gegevens);
     }
     return gegevens;
 }
@@ -55,8 +71,29 @@ export function haalCatalogus(token = null) {
     return token ? vraag({}, { actie: 'catalogus', token }) : vraag({ actie: 'catalogus' });
 }
 
-export function haalItem(id) {
-    return vraag({ actie: 'item', id });
+/** De meldingen van de controle (voor wie de lijst bijhoudt). */
+export function haalControle(token = null) {
+    return token ? vraag({}, { actie: 'controle', token }) : vraag({ actie: 'controle' });
+}
+
+/** Aanmeldpagina: mag je aanmelden, met welk account delen, is een code nodig? */
+export function haalAanmeldInfo() {
+    return vraag({ actie: 'aanmeldinfo' });
+}
+
+/** Aanmeldpagina: een lijst toevoegen. gegevens = { link, code, contact, aanmeldcode } */
+export function meldAan(gegevens) {
+    return vraag({}, { actie: 'aanmelden', ...gegevens });
+}
+
+/** Vraagt het backend om de gegevens opnieuw in te lezen (hoogstens één keer per minuut). */
+export function vernieuw() {
+    return vraag({ actie: 'vernieuw' });
+}
+
+/** Eén item voor de cursistenpagina: { id: '…' } (nieuwe link) of { v: '<YouTube-ID>' } (oude link). */
+export function haalItem(sleutel) {
+    return vraag({ actie: 'item', ...sleutel });
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +101,7 @@ export function haalItem(id) {
 // Daarna wordt altijd de nieuwste versie opgehaald.
 // ---------------------------------------------------------------------------
 
-const BEWAARSLEUTEL = 'weergave-catalogus:' + CONFIG.backendUrl;
+const BEWAARSLEUTEL = 'weergave-catalogus:' + CONFIG.backendUrl + ':' + LIJST;
 
 /** Met login bewaren we alleen tot het tabblad sluit (sessionStorage), anders langer (localStorage). */
 function opslag(metLogin) {

@@ -36,7 +36,11 @@ var STANDAARD_INSTELLINGEN = [
     { sleutel: 'ondertitel', naam: 'Ondertitel', waarde: 'Alfa NT2', uitleg: 'Klein onder de titel' },
     { sleutel: 'login', naam: 'Login verplicht', waarde: 'nee', uitleg: 'ja = lesgevers moeten inloggen met hun Microsoft-account' },
     { sleutel: 'domeinen', naam: 'Toegelaten e-maildomeinen', waarde: '', uitleg: 'Bij login: bv. ligo.be; limino.be' },
-    { sleutel: 'cacheMinuten', naam: 'Vernieuwen na (minuten)', waarde: '5', uitleg: 'Na een wijziging in de sheet staat ze ten laatste zo lang later online' }
+    { sleutel: 'cacheMinuten', naam: 'Vernieuwen na (minuten)', waarde: '5', uitleg: 'Na een wijziging in de sheet staat ze ten laatste zo lang later online' },
+    { sleutel: 'websiteAdres', naam: 'Adres van de website', waarde: '', uitleg: 'bv. https://ligolimino.github.io/digimateriaal/ — om links naar lijsten te tonen' },
+    { sleutel: 'aanmelden', naam: 'Aanmelden via de website', waarde: 'ja', uitleg: 'ja = collega\'s kunnen zelf een lijst toevoegen via de aanmeldpagina (…/aanmelden/)' },
+    { sleutel: 'aanmeldcode', naam: 'Aanmeldcode', waarde: '', uitleg: 'Een wachtwoord dat je alleen aan collega\'s geeft. Leeg = geen code nodig (iedereen met de link kan aanmelden)' },
+    { sleutel: 'oudeLinks', naam: 'Oude deellinks (?v=) voor alle video\'s', waarde: 'nee', uitleg: 'Links van de oude cursistenpagina (…/?v=YouTube-ID). nee = alleen video\'s die vrij te delen zijn; ja = elke YouTube-video uit de lijst (voor de overgang)' }
 ];
 
 /** Woorden die als "ja" of "nee" tellen in ja/nee-kolommen. */
@@ -134,6 +138,8 @@ function leesInstellingen(spreadsheet) {
     }
 
     resultaat.loginVerplicht = isJa(resultaat.login);
+    resultaat.oudeLinks = isJa(resultaat.oudeLinks);
+    resultaat.aanmelden = !isNee(resultaat.aanmelden);
     resultaat.domeinen = String(resultaat.domeinen).split(/[;,\s]+/).map(function (d) {
         return d.trim().toLowerCase().replace(/^@/, '');
     }).filter(Boolean);

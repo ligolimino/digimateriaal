@@ -196,6 +196,148 @@ await venster.setViewportSize({ width: 460, height: 400 });
 await venster.screenshot({ path: SCHERMEN + '12-uploadvenster.png' });
 await venster.close();
 
+// Zoekveld: donkere tekst op witte achtergrond
+console.log('Zoekveld en thumbnails');
+await pagina.goto(BASIS);
+await pagina.waitForSelector('.kaart');
+const kleur = await pagina.$eval('#zoek', (i) => getComputedStyle(i).color);
+controleer(kleur !== 'rgb(255, 255, 255)', 'tekst in het zoekveld is niet wit (' + kleur + ')');
+
+// ThingLink: standaardplaatje van 512×512 → vinger-icoon; echte afbeelding blijft staan
+const p3 = await context.newPage();
+let teller = 0;
+await p3.route('https://cdn.thinglink.me/**', (route) => {
+    teller++;
+    route.fulfill({ path: teller % 2 ? '/home/claude/tl512.png' : '/home/claude/tl1024.png', contentType: 'image/png' });
+});
+await p3.goto(BASIS + '#collectie=Oefeningen&programma=ThingLink');
+await p3.waitForSelector('.kaart');
+await p3.waitForTimeout(1500);
+const tlTelling = await p3.evaluate(() => ({
+    vinger: document.querySelectorAll('.kaart .plaatsvervanger.soort-interactief').length,
+    echt: [...document.querySelectorAll('.kaart-beeld img')].filter((i) => i.naturalWidth === 1024).length
+}));
+controleer(tlTelling.vinger > 5 && tlTelling.echt > 5, "ThingLink: " + tlTelling.vinger + " standaardplaatjes vervangen door het vinger-icoon, " + tlTelling.echt + ' echte afbeeldingen behouden');
+await p3.screenshot({ path: SCHERMEN + '14-thinglink.png' });
+await p3.close();
+
+// YouTube: bij pauze en einde wordt de speler VERVANGEN (niets ervoor gelegd)
+console.log('YouTube-speler');
+const p4 = await context.newPage();
+p4.on('pageerror', (e) => consoleFouten.push('pageerror (yt): ' + e.message));
+await p4.route('https://www.youtube.com/iframe_api', (route) => route.fulfill({ path: new URL('./nep-youtube-api.js', import.meta.url).pathname, contentType: 'text/javascript' }));
+await p4.goto(BASIS + "#collectie=PJM+video's");
+await p4.waitForSelector('.kaart');
+await p4.locator('.kaart .knop-hoofd').nth(1).click();
+await p4.waitForSelector('#speler iframe');
+const beginTijd = await p4.$eval('#speler iframe', (f) => f.dataset.start); // starttijd uit de link (&t=…)
+const nep = (code) => p4.evaluate(`(${code})()`);
+await nep('() => { const s = window.__nepSpelers.at(-1); s.zet(1); s.t = 42; s.zet(2); }');
+await p4.waitForTimeout(500);
+controleer((await p4.locator('.eigen-scherm').count()) === 0, 'korte pauze: speler blijft staan');
+await p4.waitForSelector('.eigen-scherm', { timeout: 4000 }).catch(() => {});
+controleer((await p4.locator('.eigen-scherm').count()) === 1 && (await p4.textContent('.eigen-scherm')).includes('Verder kijken'), 'na 1,5 s pauze: eigen scherm "Verder kijken"');
+controleer((await p4.locator('#speler iframe').count()) === 0 && await nep('() => window.__nepSpelers.at(-1).vernietigd'), 'de YouTube-speler is weggehaald (niets ervoor gelegd)');
+await p4.screenshot({ path: SCHERMEN + '15-pauze.png' });
+await p4.click('.eigen-scherm');
+await p4.waitForSelector('#speler iframe');
+const nieuweSpeler = await p4.$eval('#speler iframe', (f) => ({ start: f.dataset.start, autoplay: f.dataset.autoplay }));
+controleer(nieuweSpeler.start === '42' && nieuweSpeler.autoplay === '1', 'verder kijken: nieuwe speler vanaf 42 s, speelt meteen (' + JSON.stringify(nieuweSpeler) + ')');
+await nep('() => { const s = window.__nepSpelers.at(-1); s.zet(2); s.zet(1); }');
+await p4.waitForTimeout(1800);
+controleer((await p4.locator('.eigen-scherm').count()) === 0, 'pauze en meteen verder: geen onderbreking');
+await nep('() => window.__nepSpelers.at(-1).zet(0)');
+await p4.waitForSelector('.eigen-scherm');
+controleer((await p4.textContent('.eigen-scherm')).includes('Opnieuw bekijken'), 'einde: eigen scherm "Opnieuw bekijken"');
+await p4.click('.eigen-scherm');
+await p4.waitForSelector('#speler iframe');
+controleer((await p4.$eval('#speler iframe', (f) => f.dataset.start)) === beginTijd, 'opnieuw bekijken: vanaf het begin (' + beginTijd + ' s, uit de link)');
+await p4.keyboard.press('Escape');
+await p4.close();
+
+// Lijsten van anderen (?lijst=)
+console.log('Lijsten (optie B)');
+const p5 = await context.newPage();
+p5.on('pageerror', (e) => consoleFouten.push('pageerror (lijst): ' + e.message));
+await p5.goto(BASIS + '?lijst=leerlijn');
+await p5.waitForSelector('.kaart');
+controleer((await p5.textContent('#site-titel')) === 'Mijn digitale oefeningen', 'titel van de lijst: ' + await p5.textContent('#site-titel'));
+controleer((await p5.locator('.kaart').count()) === 2, 'twee items uit het sjabloon');
+await p5.screenshot({ path: SCHERMEN + '16-lijst.png' });
+await p5.locator('.knop-deel').first().click();
+const lijstLink = await p5.inputValue('.deel-link');
+controleer(/\/kijk\/\?lijst=leerlijn&id=[A-Za-z0-9]{10}$/.test(lijstLink), 'deellink bevat de lijst: ' + lijstLink);
+await p5.keyboard.press('Escape');
+await p5.click('#controle-knop');
+await p5.waitForFunction(() => !document.getElementById('controle-inhoud').textContent.includes('Bezig'));
+controleer((await p5.textContent('#controle-inhoud')).includes('Geen meldingen'), 'controle van de lijst: ' + (await p5.textContent('#controle-inhoud')).slice(0, 60));
+await p5.keyboard.press('Escape');
+await p5.click('#vernieuw-knop');
+await p5.waitForTimeout(500);
+controleer((await p5.textContent('#melding')).includes('minder dan een minuut'), 'vernieuwen: niet binnen de minuut');
+await p5.goto(lijstLink);
+await p5.waitForSelector('.speler-kader, .kijk-fout');
+controleer((await p5.locator('.speler-kader').count()) === 1, 'cursistenpagina met lijst: ' + await p5.textContent('#titel'));
+await p5.goto(BASIS + '?lijst=bestaat-niet');
+await p5.waitForSelector('.status-fout');
+controleer((await p5.textContent('.status-fout')).includes('bestaat niet'), 'onbekende lijst: ' + (await p5.textContent('.status-fout p')));
+await p5.goto(BASIS + '?lijst=excel');
+await p5.waitForSelector('.kaart');
+controleer((await p5.locator('.kaart').count()) === 2, 'lijst uit een Excel-bestand op Drive');
+// Controle op de eigen lijst: veel meldingen in een tabel
+await p5.goto(BASIS);
+await p5.waitForSelector('.kaart');
+await p5.click('#controle-knop');
+await p5.waitForSelector('.controle-tabel');
+controleer((await p5.locator('.controle-tabel tbody tr').count()) > 100, 'controle eigen lijst: ' + await p5.locator('.controle-tabel tbody tr').count() + ' meldingen in een tabel');
+await p5.screenshot({ path: SCHERMEN + '17-controle.png' });
+await p5.close();
+
+// Zelf aanmelden
+console.log('Aanmeldpagina');
+const p6 = await context.newPage();
+p6.on('pageerror', (e) => consoleFouten.push('pageerror (aanmelden): ' + e.message));
+await p6.goto(BASIS + 'aanmelden/');
+await p6.waitForSelector('#stappen:not([hidden])');
+controleer((await p6.inputValue('#account')) === 'beheer@voorbeeld.be', 'account om mee te delen getoond');
+controleer(await p6.locator('#code-blok').isHidden(), 'geen aanmeldcode nodig (standaard)');
+const sjabloonStatus = await p6.evaluate(async () => (await fetch('../sjabloon/Sjabloon-links-weergavewebsite.xlsx')).status);
+controleer(sjabloonStatus === 200, 'sjabloon downloadbaar');
+await p6.fill('#code', 'Mijn Lijst!');
+controleer((await p6.textContent('#voorbeeld-adres')).includes('?lijst=mijn-lijst'), 'voorbeeldadres: ' + await p6.textContent('#voorbeeld-adres'));
+await p6.click('#verstuur');
+controleer((await p6.textContent('#resultaat')).includes('Vul de link'), 'leeg formulier: melding');
+await p6.fill('#link', 'https://docs.google.com/spreadsheets/d/NietGedeeldBestand_iiiiiiiiii/edit');
+await p6.fill('#contact', 'An Peeters');
+await p6.click('#verstuur');
+await p6.waitForSelector('.resultaat.fout');
+controleer((await p6.textContent('#resultaat')).includes('Geen toegang'), 'niet gedeeld: ' + (await p6.textContent('#resultaat')).slice(0, 50));
+await p6.fill('#link', 'https://docs.google.com/spreadsheets/d/NieuweLijstTest_hhhhhhhhhhhhhh/edit?usp=sharing');
+await p6.click('#verstuur');
+await p6.waitForSelector('.resultaat.gelukt');
+controleer((await p6.textContent('#resultaat')).includes('Je website staat online'), 'aangemeld: ' + (await p6.textContent('.resultaat.gelukt p')));
+await p6.screenshot({ path: SCHERMEN + '18-aanmelden.png', fullPage: true });
+await p6.click('text=Naar mijn website');
+await p6.waitForSelector('.kaart');
+controleer((await p6.locator('.kaart').count()) === 2 && p6.url().includes('?lijst=mijn-lijst'), 'nieuwe lijst meteen online: ' + p6.url());
+// Nog eens aanmelden met hetzelfde bestand → bestaande code
+await p6.goto(BASIS + 'aanmelden/');
+await p6.waitForSelector('#stappen:not([hidden])');
+await p6.fill('#link', 'https://docs.google.com/spreadsheets/d/NieuweLijstTest_hhhhhhhhhhhhhh/edit');
+await p6.fill('#code', 'andere-naam');
+await p6.fill('#contact', 'An');
+await p6.click('#verstuur');
+await p6.waitForSelector('.resultaat.fout');
+controleer((await p6.textContent('#resultaat')).includes('al online, met de code "mijn-lijst"'), 'zelfde bestand opnieuw: bestaande code gemeld');
+const gsm2 = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true });
+const p7 = await gsm2.newPage();
+await p7.goto(BASIS + 'aanmelden/');
+await p7.waitForSelector('#stappen:not([hidden])');
+controleer((await p7.evaluate(() => document.documentElement.scrollWidth)) <= 390, 'aanmeldpagina past op gsm');
+await p7.screenshot({ path: SCHERMEN + '19-aanmelden-gsm.png', fullPage: true });
+await gsm2.close();
+await p6.close();
+
 // Mobiel
 console.log('Mobiel');
 const gsm = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 });

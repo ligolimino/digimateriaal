@@ -11,8 +11,9 @@ export const CONFIG = {
     backendUrl: 'https://script.google.com/macros/s/AKfycbwBGqk7MSOLsIZXzlymxUEq9Z50X_mSXb2G97-E3VxUEE9feKzpYdsdpqIHyFjBFuFP/exec',
 
     // Waar staat de cursistenpagina? Laat leeg voor de standaard: de map "kijk/" naast deze pagina.
-    // Alleen invullen als de cursistenpagina op een ander adres staat, bv. 'https://ligolimino.github.io/kijk/'.
-    kijkAdres: '',
+    // Staat de cursistenpagina op een apart adres (zie handleiding 8), vul dat hier in, bv.
+    //     kijkAdres: 'https://nederlandsoefenen.github.io/nt2/',
+    kijkAdres: 'https://nederlandsoefenen.github.io/nt2/',
 
     // Microsoft-login (optioneel). Alleen nodig als in de sheet "Login verplicht = ja" staat.
     // Deze twee codes krijg je van Ligo-IT na de app-registratie (zie handleiding "Login").

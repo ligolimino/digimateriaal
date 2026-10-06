@@ -193,6 +193,7 @@ a { color: var(--teal-donker); }
 .zoekveld input {
     width: 100%;
     height: 56px;
+    color: var(--tekst); /* niet de witte tekstkleur van de hero erven */
     padding: 0 16px 0 48px;
     border: none;
     border-radius: 12px;
@@ -200,6 +201,7 @@ a { color: var(--teal-donker); }
     font-size: 1.05rem;
     box-shadow: 0 6px 20px rgba(0, 0, 0, 0.15);
 }
+.zoekveld input::placeholder { color: var(--tekst-zacht); opacity: 1; }
 
 /* ----- Collecties ---------------------------------------------------- */
 
@@ -447,24 +449,25 @@ a { color: var(--teal-donker); }
 .speler-kader:-webkit-full-screen { width: 100vw; height: 100vh; }
 .speler-kader:-webkit-full-screen .speler { aspect-ratio: auto; height: 100%; }
 
-/* Ons eigen scherm over de video bij pauze en einde (verbergt de suggesties van YouTube) */
-.afdek {
+/* Ons eigen scherm bij pauze en einde. Het komt IN DE PLAATS VAN de YouTube-speler (die is dan weg),
+   niet erover: YouTube verbiedt elementen vóór de speler. */
+.eigen-scherm {
     position: absolute; inset: 0;
-    z-index: 2;
     display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px;
+    width: 100%;
     border: none;
-    background: rgba(11, 52, 71, 0.92);
+    background: var(--nacht);
     color: var(--wit);
     font-size: 1.2rem;
     font-weight: 700;
     cursor: pointer;
 }
-.afdek[hidden] { display: none; }
-.afdek .groot-icoon {
+.eigen-scherm .groot-icoon {
     width: 76px; height: 76px; padding: 18px;
     border-radius: 50%;
     background: var(--teal);
 }
+.eigen-scherm:hover .groot-icoon { background: var(--oranje); }
 
 .speler-knoppen { display: flex; flex-wrap: wrap; gap: 10px; padding: 14px 20px; }
 .speler-knoppen [hidden] { display: none; }
@@ -487,6 +490,73 @@ a { color: var(--teal-donker); }
 .qr { display: grid; place-items: center; }
 .qr svg { width: 220px; height: 220px; }
 .tekstlink { display: inline-flex; align-items: center; gap: 6px; font-size: 0.9rem; }
+
+/* Voet met de knoppen voor wie de lijst bijhoudt */
+.voet {
+    display: flex; justify-content: center; gap: 24px;
+    padding: 24px 16px 40px;
+    border-top: 1px solid var(--rand);
+    color: var(--tekst-zacht);
+}
+
+.controlevenster { width: min(1000px, 94vw); }
+.controle-inhoud { padding: 16px 20px 20px; }
+.tabel-doos { max-height: 65vh; overflow: auto; margin-top: 12px; border: 1px solid var(--rand); border-radius: var(--rond-klein); }
+.controle-tabel { width: 100%; border-collapse: collapse; font-size: 0.88rem; }
+.controle-tabel th { position: sticky; top: 0; background: var(--teal-donker); color: var(--wit); text-align: left; padding: 8px 10px; }
+.controle-tabel td { padding: 7px 10px; border-top: 1px solid var(--rand); vertical-align: top; }
+.controle-tabel tr:nth-child(even) td { background: var(--achtergrond); }
+
+/* ===== Aanmeldpagina ================================================= */
+
+.pagina.smal { max-width: 780px; }
+.stappen { list-style: none; counter-reset: stap; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 16px; }
+.stap {
+    counter-increment: stap;
+    position: relative;
+    padding: 20px 20px 20px 72px;
+    border: 1px solid var(--rand);
+    border-radius: var(--rond);
+    background: var(--wit);
+    box-shadow: var(--schaduw);
+}
+.stap::before {
+    content: counter(stap);
+    position: absolute; left: 20px; top: 18px;
+    display: grid; place-items: center;
+    width: 36px; height: 36px;
+    border-radius: 50%;
+    background: var(--teal-donker); color: var(--wit);
+    font-weight: 700;
+}
+.stap h2 { font-size: 1.15rem; margin-bottom: 6px; }
+.stap p { margin-bottom: 10px; }
+.uitleg-lijst { margin: 0; padding-left: 20px; color: var(--tekst-zacht); }
+.uitleg-lijst li { margin-bottom: 6px; }
+.formulier { display: flex; flex-direction: column; gap: 6px; }
+.formulier label { font-weight: 700; margin-top: 8px; }
+.formulier input {
+    min-height: 44px;
+    padding: 8px 12px;
+    border: 1.5px solid var(--rand);
+    border-radius: var(--rond-klein);
+    background: var(--wit);
+    color: var(--tekst);
+}
+.formulier input:focus { border-color: var(--teal); }
+.formulier .knop-groot { margin-top: 14px; align-self: flex-start; }
+.hulptekst { font-size: 0.85rem; color: var(--tekst-zacht); margin: 0; overflow-wrap: anywhere; }
+.resultaat:empty { display: none; }
+.resultaat { margin-top: 14px; padding: 16px; border-radius: var(--rond-klein); display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.resultaat .deel-rij { width: 100%; }
+.resultaat.gelukt { background: var(--afbeelding-bg); border: 1px solid #a6dcbc; }
+.resultaat.gelukt h3 { color: var(--afbeelding); }
+.resultaat.fout { background: var(--video-bg); border: 1px solid #f3b9b4; color: var(--video); }
+.resultaat ul { margin: 0; padding-left: 20px; }
+@media (max-width: 520px) {
+    .stap { padding: 64px 16px 16px; }
+    .stap::before { top: 16px; left: 16px; }
+}
 
 /* Korte melding onderaan */
 #melding {

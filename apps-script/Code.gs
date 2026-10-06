@@ -1,10 +1,10 @@
 /**
- * Weergavewebsite — backend (versie 1.0)
+ * Weergavewebsite — backend (versie 1.1)
  *
  * Dit bestand is automatisch samengevoegd uit de map backend/ (zie tools/maak-code-gs.js).
  * Pas bij voorkeur de losse bestanden aan en voeg ze daarna opnieuw samen.
  *
- * Inhoud: Api.gs, Instellingen.gs, Bronnen.gs, Links.gs, Cache.gs, Login.gs, Menu.gs, Import.gs
+ * Inhoud: Api.gs, Instellingen.gs, Bronnen.gs, Links.gs, Cache.gs, Login.gs, Menu.gs, Import.gs, Lijsten.gs
  */
 
 // ============================================================================
@@ -21,11 +21,19 @@
  *   GET  ?actie=catalogus            → alle items (alleen als login NIET verplicht is)
  *   POST {"actie":"catalogus","token":"…"}  → alle items, na controle van de login
  *   GET  ?actie=item&id=abc123       → één item voor de cursistenpagina, alleen als het vrij te delen is
+ *   GET  ?actie=item&v=<YouTube-ID>  → idem, voor oude deellinks (zie instelling "Oude deellinks")
+ *   GET  ?actie=controle             → de meldingen van de controle (zelfde toegang als catalogus)
+ *   GET  ?actie=vernieuw             → de cache legen (hoogstens één keer per minuut)
+ *   GET  ?actie=aanmeldinfo          → mag je aanmelden? met welk account moet je delen? code nodig?
+ *   POST {"actie":"aanmelden", ...}  → zelf een lijst toevoegen (zie Aanmelden in Lijsten.gs)
+ *
+ * Elk verzoek kan &lijst=<code> meekrijgen: dan gaat het over die lijst uit het tabblad "Lijsten"
+ * (zie Lijsten.gs). Zonder lijst gaat het over de gegevens in deze sheet.
  *
  * Elk antwoord is JSON met { ok: true, ... } of { ok: false, fout: "..." }.
  */
 
-var VERSIE = '1.0';
+var VERSIE = '1.1';
 
 function doGet(e) {
     var p = (e && e.parameter) || {};
@@ -44,7 +52,20 @@ function doPost(e) {
 
 function verwerk(actie, p) {
     try {
-        var instellingen = leesInstellingen(SpreadsheetApp.getActive());
+        var lijst = normaliseerLijstCode(p.lijst);
+
+        if (actie === 'vernieuw') {
+            return alsJson({ ok: true, vernieuwd: vernieuwIndienOud(lijst, 60) });
+        }
+        if (actie === 'aanmeldinfo') {
+            return alsJson(aanmeldInfo());
+        }
+        if (actie === 'aanmelden') {
+            return alsJson(meldLijstAan(p));
+        }
+
+        // Instellingen: van deze sheet (snel), of van de lijst (zitten in de catalogus in de cache).
+        var instellingen = lijst ? haalCatalogus(lijst).instellingen : leesInstellingen(SpreadsheetApp.getActive());
 
         if (actie === 'info') {
             return alsJson({
@@ -56,7 +77,7 @@ function verwerk(actie, p) {
             });
         }
 
-        if (actie === 'catalogus') {
+        if (actie === 'catalogus' || actie === 'controle') {
             var gebruiker = null;
             if (instellingen.loginVerplicht) {
                 var login = controleerLogin(p.token, instellingen);
@@ -65,21 +86,37 @@ function verwerk(actie, p) {
                 }
                 gebruiker = login.email;
             }
-            var catalogus = haalCatalogus();
-            catalogus.ok = true;
-            catalogus.titel = instellingen.titel;
-            catalogus.ondertitel = instellingen.ondertitel;
-            catalogus.gebruiker = gebruiker;
-            return alsJson(catalogus);
+            var catalogus = haalCatalogus(lijst);
+            if (actie === 'controle') {
+                return alsJson({
+                    ok: true,
+                    items: catalogus.items.length,
+                    gemaakt: catalogus.gemaakt,
+                    problemen: catalogus.problemen
+                });
+            }
+            return alsJson({
+                ok: true,
+                titel: instellingen.titel,
+                ondertitel: instellingen.ondertitel,
+                gebruiker: gebruiker,
+                gemaakt: catalogus.gemaakt,
+                collecties: catalogus.collecties,
+                filters: catalogus.filters,
+                items: catalogus.items
+            });
         }
 
         if (actie === 'item') {
-            return alsJson(zoekDeelbaarItem(String(p.id || '')));
+            if (p.v && !lijst) {
+                return alsJson(zoekOudeLink(String(p.v), instellingen));
+            }
+            return alsJson(zoekDeelbaarItem(String(p.id || ''), false, lijst));
         }
 
         return alsJson({ ok: false, fout: 'Onbekende actie: ' + actie });
     } catch (fout) {
-        return alsJson({ ok: false, fout: 'Er liep iets mis: ' + fout.message });
+        return alsJson({ ok: false, fout: fout.message || String(fout) });
     }
 }
 
@@ -88,13 +125,13 @@ function verwerk(actie, p) {
  * Geeft alleen gegevens terug als het item op "vrij te delen" staat:
  * zo kan niemand met een zelfverzonnen of oude deellink iets anders openen.
  */
-function zoekDeelbaarItem(id) {
+function zoekDeelbaarItem(id, ookNietDeelbaar, lijst) {
     if (!/^[A-Za-z0-9]{6,20}$/.test(id)) {
         return { ok: false, fout: 'Deze link is niet geldig.' };
     }
-    var catalogus = haalCatalogus();
+    var catalogus = haalCatalogus(lijst || '');
     var item = catalogus.items.filter(function (i) {
-        return i.id === id && i.deelbaar;
+        return i.id === id && (i.deelbaar || (ookNietDeelbaar && i.type === 'youtube'));
     })[0];
     if (!item) {
         return { ok: false, fout: 'Deze oefening is niet (meer) beschikbaar.' };
@@ -113,6 +150,18 @@ function zoekDeelbaarItem(id) {
             url: item.url || null
         }
     };
+}
+
+/**
+ * Oude deellinks hadden de vorm …/?v=<YouTube-ID>. We zoeken de video in de lijst
+ * (dezelfde code als een nieuwe deellink, want die wordt berekend uit de video-ID).
+ * Video's die NIET in de lijst staan, worden nooit getoond.
+ */
+function zoekOudeLink(videoId, instellingen) {
+    if (!/^[A-Za-z0-9_-]{11}$/.test(videoId)) {
+        return { ok: false, fout: 'Deze link is niet geldig.' };
+    }
+    return zoekDeelbaarItem(maakItemId('yt:' + videoId), instellingen.oudeLinks, '');
 }
 
 function alsJson(object) {
@@ -161,7 +210,11 @@ var STANDAARD_INSTELLINGEN = [
     { sleutel: 'ondertitel', naam: 'Ondertitel', waarde: 'Alfa NT2', uitleg: 'Klein onder de titel' },
     { sleutel: 'login', naam: 'Login verplicht', waarde: 'nee', uitleg: 'ja = lesgevers moeten inloggen met hun Microsoft-account' },
     { sleutel: 'domeinen', naam: 'Toegelaten e-maildomeinen', waarde: '', uitleg: 'Bij login: bv. ligo.be; limino.be' },
-    { sleutel: 'cacheMinuten', naam: 'Vernieuwen na (minuten)', waarde: '5', uitleg: 'Na een wijziging in de sheet staat ze ten laatste zo lang later online' }
+    { sleutel: 'cacheMinuten', naam: 'Vernieuwen na (minuten)', waarde: '5', uitleg: 'Na een wijziging in de sheet staat ze ten laatste zo lang later online' },
+    { sleutel: 'websiteAdres', naam: 'Adres van de website', waarde: '', uitleg: 'bv. https://ligolimino.github.io/digimateriaal/ — om links naar lijsten te tonen' },
+    { sleutel: 'aanmelden', naam: 'Aanmelden via de website', waarde: 'ja', uitleg: 'ja = collega\'s kunnen zelf een lijst toevoegen via de aanmeldpagina (…/aanmelden/)' },
+    { sleutel: 'aanmeldcode', naam: 'Aanmeldcode', waarde: '', uitleg: 'Een wachtwoord dat je alleen aan collega\'s geeft. Leeg = geen code nodig (iedereen met de link kan aanmelden)' },
+    { sleutel: 'oudeLinks', naam: 'Oude deellinks (?v=) voor alle video\'s', waarde: 'nee', uitleg: 'Links van de oude cursistenpagina (…/?v=YouTube-ID). nee = alleen video\'s die vrij te delen zijn; ja = elke YouTube-video uit de lijst (voor de overgang)' }
 ];
 
 /** Woorden die als "ja" of "nee" tellen in ja/nee-kolommen. */
@@ -259,6 +312,8 @@ function leesInstellingen(spreadsheet) {
     }
 
     resultaat.loginVerplicht = isJa(resultaat.login);
+    resultaat.oudeLinks = isJa(resultaat.oudeLinks);
+    resultaat.aanmelden = !isNee(resultaat.aanmelden);
     resultaat.domeinen = String(resultaat.domeinen).split(/[;,\s]+/).map(function (d) {
         return d.trim().toLowerCase().replace(/^@/, '');
     }).filter(Boolean);
@@ -872,18 +927,29 @@ function linkSleutel(analyse) {
  *   - De eerste bezoeker laat de catalogus opbouwen (enkele seconden).
  *   - Het resultaat gaat gecomprimeerd in de cache van Google, voor "Vernieuwen na (minuten)".
  *   - Volgende bezoekers krijgen het resultaat meteen.
- *   - Wie iets wijzigt in de sheet, leegt automatisch de cache (zie onEdit in Menu.gs).
+ *   - Wie iets wijzigt in DEZE sheet, leegt automatisch de cache (zie onEdit in Menu.gs).
+ *     Voor lijsten van anderen (zie Lijsten.gs) kan dat niet: daar telt "Vernieuwen na (minuten)"
+ *     van die lijst, of de knop "Gegevens vernieuwen" op de website.
  *
- * Een cache-waarde mag maximaal 100 KB zijn. Daarom knippen we de gegevens in stukken.
+ * Elke lijst heeft zijn eigen plek in de cache. Een cache-waarde mag maximaal 100 KB zijn:
+ * daarom knippen we de gegevens in stukken. Elke versie krijgt een eigen nummer, zodat
+ * niemand ooit stukken van twee verschillende versies door elkaar leest.
  */
 
-var CACHE_INDEX = 'catalogus_index';
-var CACHE_DEEL = 'catalogus_deel_';
 var CACHE_STUKGROOTTE = 90000;
 
-/** Geeft de catalogus terug: uit de cache als dat kan, anders opnieuw opgebouwd. */
-function haalCatalogus() {
-    var uitCache = leesUitCache();
+function cacheSleutel(lijst) {
+    return 'cat_' + (lijst || 'eigen');
+}
+
+/**
+ * Geeft de volledige catalogus van een lijst terug ('' = deze sheet):
+ *   { collecties, filters, items, problemen, instellingen, gemaakt }
+ * Uit de cache als dat kan, anders opnieuw opgebouwd.
+ */
+function haalCatalogus(lijst) {
+    var sleutel = cacheSleutel(lijst);
+    var uitCache = leesUitCache(sleutel);
     if (uitCache) {
         return uitCache;
     }
@@ -892,16 +958,12 @@ function haalCatalogus() {
     var slot = LockService.getScriptLock();
     var gekregen = slot.tryLock(30000);
     try {
-        uitCache = leesUitCache();
+        uitCache = leesUitCache(sleutel);
         if (uitCache) {
             return uitCache;
         }
-        var spreadsheet = SpreadsheetApp.getActive();
-        var instellingen = leesInstellingen(spreadsheet);
-        var catalogus = bouwCatalogus(spreadsheet);
-        delete catalogus.problemen; // die zijn alleen voor het tabblad Controle
-        catalogus.gemaakt = new Date().toISOString();
-        schrijfInCache(catalogus, instellingen.cacheMinuten * 60);
+        var catalogus = bouwVoorLijst(lijst);
+        schrijfInCache(sleutel, catalogus, catalogus.instellingen.cacheMinuten * 60);
         return catalogus;
     } finally {
         if (gekregen) {
@@ -910,47 +972,86 @@ function haalCatalogus() {
     }
 }
 
-function schrijfInCache(object, seconden) {
+/** Bouwt de catalogus van een lijst op, met de instellingen van die lijst erbij. */
+function bouwVoorLijst(lijst) {
+    var bron = openLijst(lijst);
+    try {
+        var instellingen = leesInstellingen(bron.spreadsheet);
+        var catalogus = bouwCatalogus(bron.spreadsheet);
+        catalogus.instellingen = {
+            titel: instellingen.titel,
+            ondertitel: instellingen.ondertitel,
+            loginVerplicht: instellingen.loginVerplicht,
+            domeinen: instellingen.domeinen,
+            cacheMinuten: instellingen.cacheMinuten,
+            oudeLinks: instellingen.oudeLinks
+        };
+        catalogus.gemaakt = new Date().toISOString();
+        return catalogus;
+    } finally {
+        bron.opruimen();
+    }
+}
+
+function schrijfInCache(sleutel, object, seconden) {
     var cache = CacheService.getScriptCache();
     var gezipt = Utilities.gzip(Utilities.newBlob(JSON.stringify(object), 'application/json'));
     var tekst = Utilities.base64Encode(gezipt.getBytes());
+    var versie = String(new Date().getTime());
 
     var stukken = {};
     var aantal = Math.ceil(tekst.length / CACHE_STUKGROOTTE);
     for (var i = 0; i < aantal; i++) {
-        stukken[CACHE_DEEL + i] = tekst.slice(i * CACHE_STUKGROOTTE, (i + 1) * CACHE_STUKGROOTTE);
+        stukken[sleutel + '_' + versie + '_' + i] = tekst.slice(i * CACHE_STUKGROOTTE, (i + 1) * CACHE_STUKGROOTTE);
     }
     // Eerst de stukken, dan pas de index: zo leest niemand een half geschreven catalogus.
     cache.putAll(stukken, seconden);
-    cache.put(CACHE_INDEX, JSON.stringify({ aantal: aantal }), seconden);
+    cache.put(sleutel + '_index', JSON.stringify({ aantal: aantal, versie: versie, gemaakt: object.gemaakt }), seconden);
 }
 
-function leesUitCache() {
+function leesUitCache(sleutel) {
     var cache = CacheService.getScriptCache();
-    var index = cache.get(CACHE_INDEX);
+    var index = cache.get(sleutel + '_index');
     if (!index) {
         return null;
     }
-    var aantal = JSON.parse(index).aantal;
+    var info = JSON.parse(index);
     var sleutels = [];
-    for (var i = 0; i < aantal; i++) {
-        sleutels.push(CACHE_DEEL + i);
+    for (var i = 0; i < info.aantal; i++) {
+        sleutels.push(sleutel + '_' + info.versie + '_' + i);
     }
     var stukken = cache.getAll(sleutels);
     var tekst = '';
-    for (var j = 0; j < aantal; j++) {
-        if (!stukken[CACHE_DEEL + j]) {
+    for (var j = 0; j < sleutels.length; j++) {
+        if (!stukken[sleutels[j]]) {
             return null; // een stuk is al verlopen: opnieuw opbouwen
         }
-        tekst += stukken[CACHE_DEEL + j];
+        tekst += stukken[sleutels[j]];
     }
     var blob = Utilities.newBlob(Utilities.base64Decode(tekst), 'application/x-gzip');
     return JSON.parse(Utilities.ungzip(blob).getDataAsString());
 }
 
-/** Leegt de cache: de volgende bezoeker ziet meteen de nieuwste versie van de sheet. */
-function leegCache() {
-    CacheService.getScriptCache().remove(CACHE_INDEX);
+/** Leegt de cache van een lijst ('' = deze sheet): de volgende bezoeker ziet meteen de nieuwste versie. */
+function leegCache(lijst) {
+    CacheService.getScriptCache().remove(cacheSleutel(lijst) + '_index');
+}
+
+/**
+ * Voor de knop "Gegevens vernieuwen" op de website: leegt de cache, maar alleen als de
+ * gegevens ouder zijn dan `minSeconden`. Zo kan niemand het script laten overuren door
+ * honderd keer op de knop te drukken.
+ */
+function vernieuwIndienOud(lijst, minSeconden) {
+    var index = CacheService.getScriptCache().get(cacheSleutel(lijst) + '_index');
+    if (index) {
+        var leeftijd = (new Date().getTime() - new Date(JSON.parse(index).gemaakt).getTime()) / 1000;
+        if (leeftijd < minSeconden) {
+            return false;
+        }
+    }
+    leegCache(lijst);
+    return true;
 }
 
 // ============================================================================
@@ -1033,20 +1134,25 @@ function onOpen() {
         .addSeparator()
         .addItem('Controle uitvoeren', 'menuControle')
         .addItem('Website nu vernieuwen', 'menuVernieuwen')
+        .addSeparator()
+        .addSubMenu(SpreadsheetApp.getUi().createMenu('Lijsten van anderen')
+            .addItem('Lijst toevoegen…', 'menuLijstToevoegen')
+            .addItem('Controle van een lijst…', 'menuLijstControle')
+            .addItem('Alle lijsten vernieuwen', 'menuLijstenVernieuwen'))
         .addToUi();
 }
 
 /** Bij elke wijziging in de sheet: cache leegmaken, zodat de website meteen de nieuwe versie toont. */
 function onEdit() {
     try {
-        leegCache();
+        leegCache('');
     } catch (fout) {
         // Een fout hier mag het bewerken van de sheet nooit hinderen.
     }
 }
 
 function menuVernieuwen() {
-    leegCache();
+    leegCache('');
     SpreadsheetApp.getActive().toast('De website toont bij de volgende keer laden de nieuwste gegevens.', 'Website', 5);
 }
 
@@ -1130,7 +1236,7 @@ function raadBronnen(ss) {
     var GEEN_LINK = /(hulp|qr|insluit|kopieer|code|klad|omzetting)/;
     var FILTER = /^(thema|niveau|vaardigheid|programma|type|soort|kern|boekje|sterren|module|categorie)/;
     var OMSCHRIJVING = /(omschrijving|beschrijving|uitleg)/;
-    var overslaan = [TAB_BRONNEN, TAB_INSTELLINGEN, TAB_CONTROLE];
+    var overslaan = [TAB_BRONNEN, TAB_INSTELLINGEN, TAB_CONTROLE, TAB_LIJSTEN];
     var voorstel = [];
 
     ss.getSheets().forEach(function (blad) {
@@ -1248,7 +1354,12 @@ function menuKolommenToevoegen() {
 
 function menuControle() {
     var ss = SpreadsheetApp.getActive();
-    var catalogus = bouwCatalogus(ss);
+    schrijfControle(ss, bouwCatalogus(ss), 'deze sheet');
+    leegCache('');
+}
+
+/** Schrijft het controlerapport in het tabblad "Controle" van deze sheet. */
+function schrijfControle(ss, catalogus, over) {
     var blad = ss.getSheetByName(TAB_CONTROLE) || ss.insertSheet(TAB_CONTROLE);
     blad.clear();
 
@@ -1256,7 +1367,7 @@ function menuControle() {
         return i.deelbaar;
     }).length;
     var samenvatting = [
-        ['Controle van ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm'), '', '', '', '', ''],
+        ['Controle van ' + over + ' — ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm'), '', '', '', '', ''],
         ['Items op de website: ' + catalogus.items.length + ' — waarvan vrij te delen: ' + deelbaar +
             ' — meldingen: ' + catalogus.problemen.length, '', '', '', '', ''],
         ['', '', '', '', '', ''],
@@ -1275,7 +1386,87 @@ function menuControle() {
     blad.setColumnWidth(5, 420);
     blad.setColumnWidth(6, 360);
     ss.setActiveSheet(blad);
-    leegCache();
+}
+
+// ---------------------------------------------------------------------------
+// Lijsten van anderen (zie Lijsten.gs)
+// ---------------------------------------------------------------------------
+
+/** Vraagt iets via een venstertje; geeft null terug bij Annuleren. */
+function vraag(titel, tekst) {
+    var ui = SpreadsheetApp.getUi();
+    var antwoord = ui.prompt(titel, tekst, ui.ButtonSet.OK_CANCEL);
+    if (antwoord.getSelectedButton() !== ui.Button.OK) {
+        return null;
+    }
+    return antwoord.getResponseText().trim();
+}
+
+function menuLijstToevoegen() {
+    var ui = SpreadsheetApp.getUi();
+    var ss = SpreadsheetApp.getActive();
+
+    var link = vraag('Lijst toevoegen (1/2)',
+        'Plak de link naar de Google Sheet of het Excel-bestand op Google Drive.\n' +
+        'De eigenaar moet het eerst delen met dit account (lezen volstaat).');
+    if (!link) return;
+
+    // Eerst proberen te openen en in te lezen: zo weet je meteen of alles klopt.
+    var bron;
+    var catalogus;
+    try {
+        bron = openBestand(link);
+        catalogus = bouwCatalogus(bron.spreadsheet);
+    } catch (fout) {
+        ui.alert('Lijst toevoegen', 'Dat lukte niet:\n' + fout.message, ui.ButtonSet.OK);
+        return;
+    } finally {
+        if (bron) bron.opruimen();
+    }
+
+    var code = normaliseerLijstCode(vraag('Lijst toevoegen (2/2)',
+        'Geef een korte code voor deze lijst (kleine letters, geen spaties), bv. leerlijn-alfa.\n' +
+        'De lijst komt dan op het adres van de website met ?lijst=<code> erachter.'));
+    if (!code) return;
+    if (leesLijsten(ss).some(function (l) { return l.code === code; })) {
+        ui.alert('Lijst toevoegen', 'De code "' + code + '" bestaat al. Kies een andere code.', ui.ButtonSet.OK);
+        return;
+    }
+
+    var blad = ss.getSheetByName(TAB_LIJSTEN) || maakLijstenTabblad(ss);
+    blad.getRange(blad.getLastRow() + 1, 1, 1, LIJST_KOLOMMEN.length)
+        .setValues([['ja', code, bron.naam || '', link, '']]);
+
+    var adres = leesInstellingen(ss).websiteAdres;
+    var ernstig = catalogus.problemen.filter(function (p) {
+        return /niet gevonden|bestaat niet|ontbreekt/.test(p.probleem);
+    });
+    ui.alert('Lijst toegevoegd',
+        'Code: ' + code + '\nItems: ' + catalogus.items.length + '\nMeldingen: ' + catalogus.problemen.length +
+        (ernstig.length ? '\n\nLET OP:\n' + ernstig.slice(0, 5).map(function (p) { return p.probleem; }).join('\n') : '') +
+        '\n\nAdres: ' + (adres ? adres.replace(/\/?$/, '/') + '?lijst=' + code : '(adres van de website)?lijst=' + code),
+        ui.ButtonSet.OK);
+}
+
+function menuLijstControle() {
+    var ui = SpreadsheetApp.getUi();
+    var code = normaliseerLijstCode(vraag('Controle van een lijst', 'Code van de lijst (zie tabblad Lijsten):'));
+    if (!code) return;
+    try {
+        leegCache(code);
+        schrijfControle(SpreadsheetApp.getActive(), haalCatalogus(code), 'lijst "' + code + '"');
+    } catch (fout) {
+        ui.alert('Controle', fout.message, ui.ButtonSet.OK);
+    }
+}
+
+function menuLijstenVernieuwen() {
+    var ss = SpreadsheetApp.getActive();
+    leegCache('');
+    leesLijsten(ss).forEach(function (l) {
+        leegCache(l.code);
+    });
+    ss.toast('Alle lijsten tonen bij de volgende keer laden de nieuwste gegevens.', 'Website', 5);
 }
 
 // ============================================================================
@@ -1327,7 +1518,7 @@ function importeerExcel(bestandsnaam, base64) {
     var verslag = [];
     try {
         var bron = SpreadsheetApp.openById(tijdelijkId);
-        var overslaan = [TAB_BRONNEN, TAB_INSTELLINGEN, TAB_CONTROLE];
+        var overslaan = [TAB_BRONNEN, TAB_INSTELLINGEN, TAB_CONTROLE, TAB_LIJSTEN];
         var namenInExcel = [];
 
         bron.getSheets().forEach(function (blad) {
@@ -1354,7 +1545,7 @@ function importeerExcel(bestandsnaam, base64) {
     }
 
     noteerImport(doel, bestandsnaam);
-    leegCache();
+    leegCache('');
 
     var catalogus = bouwCatalogus(doel);
     var ernstig = catalogus.problemen.filter(function (p) {
@@ -1527,3 +1718,241 @@ var IMPORT_VENSTER_HTML = [
     '}',
     '</script></body></html>'
 ].join('\n');
+
+// ============================================================================
+// Lijsten.gs
+// ============================================================================
+
+/**
+ * Lijsten.gs — één centrale website voor meerdere lijsten.
+ *
+ * Naast de eigen gegevens kan dit script ook lijsten van ANDEREN tonen:
+ * een opleidingsverantwoordelijke vult het sjabloon in, deelt de sheet (alleen lezen)
+ * met het account dat dit script beheert, en de beheerder zet één rij in het tabblad "Lijsten".
+ * De lijst staat dan op  <adres van de website>?lijst=<code>
+ *
+ * De lijst mag zijn:
+ *   - een Google Sheet, of
+ *   - een Excel-bestand (.xlsx) op Google Drive. Dat wordt bij het inlezen omgezet
+ *     (daarvoor is de dienst Drive API nodig, net als bij Excel-bestand inladen).
+ *     Bijwerken = in Drive een nieuwe versie van hetzelfde bestand uploaden.
+ *
+ * Alleen lijsten die in het tabblad "Lijsten" staan (en Actief zijn) kunnen geopend worden:
+ * niemand kan via de website een willekeurige sheet laten inlezen.
+ */
+
+var TAB_LIJSTEN = 'Lijsten';
+
+var LIJST_KOLOMMEN = [
+    { sleutel: 'actief', kop: 'Actief', uitleg: 'ja / nee' },
+    { sleutel: 'code', kop: 'Code', uitleg: 'Kort, zonder spaties, bv. leerlijn-alfa. Komt in het adres: ?lijst=leerlijn-alfa' },
+    { sleutel: 'naam', kop: 'Naam', uitleg: 'Voor jezelf: wat is dit voor lijst?' },
+    { sleutel: 'link', kop: 'Link naar de sheet', uitleg: 'De link naar de Google Sheet of het Excel-bestand op Google Drive' },
+    { sleutel: 'contact', kop: 'Contactpersoon', uitleg: 'Wie houdt deze lijst bij?' }
+];
+
+var MIME_GOOGLE_SHEET = 'application/vnd.google-apps.spreadsheet';
+var MIME_EXCEL = [
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'application/vnd.ms-excel',
+    'application/vnd.ms-excel.sheet.macroEnabled.12'
+];
+
+/** "Leerlijn Alfa!" → "leerlijnalfa". Alleen kleine letters, cijfers en koppeltekens. */
+function normaliseerLijstCode(code) {
+    return String(code || '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+}
+
+function leesLijsten(spreadsheet) {
+    var blad = spreadsheet.getSheetByName(TAB_LIJSTEN);
+    if (!blad || blad.getLastRow() < 2) {
+        return [];
+    }
+    var waarden = blad.getDataRange().getDisplayValues();
+    var koppen = waarden[0].map(normaliseerKop);
+    var positie = {};
+    LIJST_KOLOMMEN.forEach(function (k) {
+        positie[k.sleutel] = koppen.indexOf(normaliseerKop(k.kop));
+    });
+    var lijsten = [];
+    for (var r = 1; r < waarden.length; r++) {
+        var lijst = {};
+        LIJST_KOLOMMEN.forEach(function (k) {
+            lijst[k.sleutel] = positie[k.sleutel] === -1 ? '' : String(waarden[r][positie[k.sleutel]]).trim();
+        });
+        lijst.code = normaliseerLijstCode(lijst.code);
+        if (lijst.code && lijst.link) {
+            lijst.actief = !isNee(lijst.actief);
+            lijsten.push(lijst);
+        }
+    }
+    return lijsten;
+}
+
+/** Haalt de bestands-ID uit een link van Google Sheets of Google Drive. */
+function haalBestandsId(link) {
+    var tekst = String(link || '').trim();
+    var m = tekst.match(/\/d\/([A-Za-z0-9_-]{20,})/) || tekst.match(/[?&]id=([A-Za-z0-9_-]{20,})/);
+    if (m) {
+        return m[1];
+    }
+    return /^[A-Za-z0-9_-]{20,}$/.test(tekst) ? tekst : '';
+}
+
+/**
+ * Opent de spreadsheet van een lijst. Geeft { spreadsheet, opruimen } terug.
+ * Na gebruik ALTIJD opruimen() aanroepen (bij Excel: het tijdelijke bestand weggooien).
+ */
+function openLijst(code) {
+    code = normaliseerLijstCode(code);
+    if (!code) {
+        return { spreadsheet: SpreadsheetApp.getActive(), opruimen: function () {} };
+    }
+    var lijst = leesLijsten(SpreadsheetApp.getActive()).filter(function (l) {
+        return l.code === code && l.actief;
+    })[0];
+    if (!lijst) {
+        throw new Error('De lijst "' + code + '" bestaat niet (meer).');
+    }
+    return openBestand(lijst.link);
+}
+
+/** Opent een Google Sheet of een Excel-bestand op Drive, via de link. */
+function openBestand(link) {
+    var id = haalBestandsId(link);
+    if (!id) {
+        throw new Error('Dit is geen geldige link naar een Google Sheet of een bestand op Google Drive.');
+    }
+    var bestand;
+    try {
+        bestand = DriveApp.getFileById(id);
+    } catch (fout) {
+        throw new Error('Geen toegang tot deze lijst. Deel de sheet (lezen volstaat) met het account dat de website beheert.');
+    }
+    var soort = bestand.getMimeType();
+    if (soort === MIME_GOOGLE_SHEET) {
+        return { spreadsheet: SpreadsheetApp.openById(id), opruimen: function () {}, naam: bestand.getName() };
+    }
+    if (MIME_EXCEL.indexOf(soort) !== -1) {
+        var tijdelijkId = zetOmNaarGoogleSheet(bestand.getBlob(), 'Tijdelijk – ' + bestand.getName());
+        return {
+            spreadsheet: SpreadsheetApp.openById(tijdelijkId),
+            naam: bestand.getName(),
+            opruimen: function () {
+                DriveApp.getFileById(tijdelijkId).setTrashed(true);
+            }
+        };
+    }
+    throw new Error('Dit bestand is geen Google Sheet en geen Excel-bestand.');
+}
+
+// ---------------------------------------------------------------------------
+// Zelf aanmelden via de website (pagina …/aanmelden/)
+// ---------------------------------------------------------------------------
+
+/** Wat de aanmeldpagina moet weten. */
+function aanmeldInfo() {
+    var instellingen = leesInstellingen(SpreadsheetApp.getActive());
+    return {
+        ok: true,
+        toegelaten: instellingen.aanmelden,
+        codeNodig: Boolean(instellingen.aanmeldcode),
+        // Met dit account moet de lijst gedeeld worden (het account dat het script uitvoert).
+        account: Session.getEffectiveUser().getEmail()
+    };
+}
+
+/**
+ * Voegt een lijst toe op vraag van de website.
+ * p: { link, code, contact, aanmeldcode }
+ * Alles wordt eerst gecontroleerd; pas als de lijst echt werkt, komt ze in het tabblad Lijsten.
+ */
+function meldLijstAan(p) {
+    var ss = SpreadsheetApp.getActive();
+    var instellingen = leesInstellingen(ss);
+
+    if (!instellingen.aanmelden) {
+        return { ok: false, fout: 'Zelf aanmelden staat uit. Vraag de beheerder van de website om je lijst toe te voegen.' };
+    }
+    if (instellingen.aanmeldcode && String(p.aanmeldcode || '').trim() !== instellingen.aanmeldcode) {
+        return { ok: false, fout: 'De aanmeldcode klopt niet.' };
+    }
+
+    var code = normaliseerLijstCode(p.code);
+    if (code.length < 3 || code.length > 40) {
+        return { ok: false, fout: 'Kies een code van 3 tot 40 tekens: kleine letters, cijfers en koppeltekens.' };
+    }
+    var id = haalBestandsId(p.link);
+    if (!id) {
+        return { ok: false, fout: 'Dit is geen geldige link naar een Google Sheet of een bestand op Google Drive.' };
+    }
+    var contact = String(p.contact || '').trim().slice(0, 100);
+    if (!contact) {
+        return { ok: false, fout: 'Vul je naam of e-mailadres in, zodat de beheerder weet wie deze lijst bijhoudt.' };
+    }
+
+    // Staat dit bestand er al? Geef dan de bestaande code terug.
+    var bestaand = leesLijsten(ss).filter(function (l) {
+        return haalBestandsId(l.link) === id;
+    })[0];
+    if (bestaand) {
+        return { ok: false, fout: 'Deze lijst staat al online, met de code "' + bestaand.code + '".', code: bestaand.code };
+    }
+
+    // Openen en inlezen: werkt de lijst echt?
+    var bron;
+    var catalogus;
+    var titel = '';
+    try {
+        bron = openBestand(p.link);
+        catalogus = bouwCatalogus(bron.spreadsheet);
+        titel = leesInstellingen(bron.spreadsheet).titel;
+    } catch (fout) {
+        return { ok: false, fout: fout.message };
+    } finally {
+        if (bron) bron.opruimen();
+    }
+    var ernstig = catalogus.problemen.filter(function (pr) {
+        return /niet gevonden|bestaat niet/.test(pr.probleem);
+    });
+    if (ernstig.length || catalogus.items.length === 0) {
+        return {
+            ok: false,
+            fout: 'Er staan nog geen links in deze lijst die de website kan tonen. Volgde je het sjabloon?',
+            details: ernstig.map(function (pr) { return pr.probleem; }).slice(0, 5)
+        };
+    }
+
+    // Toevoegen. Het slot zorgt dat twee mensen niet tegelijk dezelfde code krijgen.
+    var slot = LockService.getScriptLock();
+    slot.waitLock(20000);
+    try {
+        if (leesLijsten(ss).some(function (l) { return l.code === code; })) {
+            return { ok: false, fout: 'De code "' + code + '" is al in gebruik. Kies een andere.' };
+        }
+        var blad = ss.getSheetByName(TAB_LIJSTEN) || maakLijstenTabblad(ss);
+        var datum = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy');
+        blad.getRange(blad.getLastRow() + 1, 1, 1, LIJST_KOLOMMEN.length)
+            .setValues([['ja', code, bron.naam || '', p.link, contact + ' (aangemeld ' + datum + ')']]);
+    } finally {
+        slot.releaseLock();
+    }
+
+    return {
+        ok: true,
+        code: code,
+        titel: titel,
+        items: catalogus.items.length,
+        meldingen: catalogus.problemen.length
+    };
+}
+
+function maakLijstenTabblad(ss) {
+    var blad = ss.insertSheet(TAB_LIJSTEN);
+    blad.getRange(1, 1, 1, LIJST_KOLOMMEN.length).setValues([LIJST_KOLOMMEN.map(function (k) { return k.kop; })]);
+    LIJST_KOLOMMEN.forEach(function (k, i) {
+        blad.getRange(1, i + 1).setNote(k.uitleg);
+    });
+    opmaakKoprij(blad, LIJST_KOLOMMEN.length);
+    return blad;
+}

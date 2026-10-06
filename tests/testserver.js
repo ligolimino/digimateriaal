@@ -48,7 +48,32 @@ ss.voegBladToe({
     verborgen: false,
     tonen: fs.readFileSync(path.join(__dirname, '..', 'handleiding', 'website-tabblad-ligo.tsv'), 'utf8').trim().split('\n').map((r) => r.split('\t'))
 });
-const backend = laadBackend(ss);
+// Twee lijsten van "anderen" (optie B): het sjabloon als Google Sheet en als Excel-bestand.
+const ID_SHEET = 'SjabloonSheetId_aaaaaaaaaaaa';
+const ID_EXCEL = 'ExcelBestandId_bbbbbbbbbbbbb';
+ss.voegBladToe({
+    naam: 'Lijsten',
+    verborgen: false,
+    tonen: [
+        ['Actief', 'Code', 'Naam', 'Link naar de sheet', 'Contactpersoon'],
+        ['ja', 'leerlijn', 'Leerlijn (test)', 'https://docs.google.com/spreadsheets/d/' + ID_SHEET + '/edit', ''],
+        ['ja', 'excel', 'Excel (test)', 'https://drive.google.com/file/d/' + ID_EXCEL + '/view', '']
+    ]
+});
+function sjabloon(vrijTeDelen) {
+    const bladen = JSON.parse(fs.readFileSync(path.join(__dirname, 'sjabloon.json'), 'utf8'));
+    if (vrijTeDelen) bladen.find((b) => b.naam === 'Links').tonen[1][6] = 'ja';
+    return new NepSpreadsheet(bladen);
+}
+const backend = laadBackend(ss, {
+    drive: {
+        [ID_SHEET]: { mime: 'application/vnd.google-apps.spreadsheet', ss: sjabloon(true), naam: 'Leerlijn' },
+        [ID_EXCEL]: { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', naam: 'lijst.xlsx' },
+        // Een lijst die nog niet aangemeld is (voor de test van de aanmeldpagina)
+        NieuweLijstTest_hhhhhhhhhhhhhh: { mime: 'application/vnd.google-apps.spreadsheet', ss: sjabloon(true), naam: 'Nieuwe lijst' }
+    },
+    omzetting: () => sjabloon(false)
+});
 
 const TYPES = {
     '.html': 'text/html; charset=utf-8',
@@ -85,11 +110,20 @@ http.createServer((req, res) => {
         return;
     }
 
+    // De aparte cursistensite (zoals nederlandsoefenen.github.io/nt2/), die code van de hoofdsite laadt.
+    if (adres.pathname === '/nt2/') {
+        res.writeHead(200, { 'Content-Type': TYPES['.html'] });
+        res.end(fs.readFileSync(path.join(SITE, 'cursistensite', 'index.html'), 'utf8')
+            .replace(/https:\/\/ligolimino\.github\.io\/(digimateriaal\/)?/g, 'http://localhost:' + POORT + '/'));
+        return;
+    }
+
     // config.js met het adres van het nep-backend
     if (adres.pathname === '/js/config.js') {
-        res.writeHead(200, { 'Content-Type': TYPES['.js'] });
+        res.writeHead(200, { 'Content-Type': TYPES['.js'], 'Access-Control-Allow-Origin': '*' });
         res.end(fs.readFileSync(path.join(SITE, 'js', 'config.js'), 'utf8')
-            .replace("backendUrl: ''", "backendUrl: 'http://localhost:" + POORT + "/exec'"));
+            .replace(/^(\s*)backendUrl: '[^']*'/m, "$1backendUrl: 'http://localhost:" + POORT + "/exec'")
+            .replace(/^(\s*)kijkAdres: '[^']*'/m, "$1kijkAdres: '" + (process.env.KIJKADRES || '') + "'"));
         return;
     }
 
@@ -112,6 +146,6 @@ http.createServer((req, res) => {
         res.end('Niet gevonden');
         return;
     }
-    res.writeHead(200, { 'Content-Type': TYPES[path.extname(bestand)] || 'application/octet-stream' });
+    res.writeHead(200, { 'Content-Type': TYPES[path.extname(bestand)] || 'application/octet-stream', 'Access-Control-Allow-Origin': '*' });
     fs.createReadStream(bestand).pipe(res);
 }).listen(POORT, () => console.log('Testserver op http://localhost:' + POORT + '/'));

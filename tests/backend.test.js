@@ -184,7 +184,7 @@ test('API: info, catalogus, item, cache', () => {
     assert.equal(cat.ok, true);
     assert.equal(cat.problemen, undefined, 'meldingen gaan niet naar de website');
     const schrijfVoor = be.__cache.schrijfacties;
-    assert.ok(be.__cache.get('catalogus_index'), 'catalogus in de cache');
+    assert.ok(be.__cache.get('cat_eigen_index'), 'catalogus in de cache');
 
     // Tweede keer: uit de cache, er wordt niets opnieuw geschreven.
     const cat2 = json(be.doGet({ parameter: { actie: 'catalogus' } }));
@@ -216,7 +216,7 @@ test('API: info, catalogus, item, cache', () => {
 
     // Na een wijziging (onEdit) is de cache leeg.
     be.onEdit();
-    assert.equal(be.__cache.get('catalogus_index'), null);
+    assert.equal(be.__cache.get('cat_eigen_index'), null);
 });
 
 test('API: login verplicht', () => {
@@ -407,4 +407,188 @@ test('Excel-bestand inladen: duidelijke fouten', () => {
     const be = laadBackend(new NepSpreadsheet([]), { zonderDrive: true });
     assert.throws(() => be.importeerExcel('lijst.pdf', ''), /Excel-bestand/);
     assert.throws(() => be.importeerExcel('lijst.xlsx', ''), /Drive API/);
+});
+
+test('Oude deellinks (?v=YouTube-ID)', () => {
+    const ss = maakLigoSheet((bladen) => {
+        const pjm = bladen.find((b) => b.naam === 'PJM');
+        voegKolomToe(pjm, 1, 'Video vrij te delen', (r) => (r === 3 ? 'ja' : '')); // rij 3 = oEDsDnXPORc
+    });
+    const be = laadBackend(ss);
+    const json = (u) => JSON.parse(u.tekst);
+    const vraag = (v) => json(be.doGet({ parameter: { actie: 'item', v } }));
+
+    assert.equal(vraag('oEDsDnXPORc').ok, true, 'video in de lijst én vrij te delen');
+    assert.equal(vraag('oEDsDnXPORc').item.embed, 'https://www.youtube-nocookie.com/embed/oEDsDnXPORc');
+    assert.equal(vraag('04TQxMHEKf0').ok, false, 'video in de lijst, niet vrij te delen → standaard geweigerd');
+    assert.equal(vraag('dQw4w9WgXcQ').ok, false, 'video niet in de lijst → altijd geweigerd');
+    assert.equal(vraag('<script>').ok, false);
+
+    // Overgangsinstelling: alle video's uit de lijst
+    ss.voegBladToe({ naam: 'Website-instellingen', verborgen: false, tonen: [['Instelling', 'Waarde'], ["Oude deellinks (?v=) voor alle video's", 'ja']] });
+    be.leegCache();
+    assert.equal(vraag('04TQxMHEKf0').ok, true, 'met overgangsinstelling: wel');
+    assert.equal(vraag('dQw4w9WgXcQ').ok, false, 'video niet in de lijst → nog altijd geweigerd');
+});
+
+// ---------------------------------------------------------------------------
+// Lijsten van anderen (optie B)
+// ---------------------------------------------------------------------------
+
+const SJABLOON = path.join(__dirname, 'sjabloon.json');
+const ID_SHEET = 'SjabloonSheetId_aaaaaaaaaaaa';
+const ID_EXCEL = 'ExcelBestandId_bbbbbbbbbbbbb';
+
+function maakCentraal(extraRijen = []) {
+    const ss = maakLigoSheet();
+    ss.voegBladToe({
+        naam: 'Lijsten', verborgen: false, tonen: [
+            ['Actief', 'Code', 'Naam', 'Link naar de sheet', 'Contactpersoon'],
+            ['ja', 'Leerlijn', 'Leerlijn alfa', 'https://docs.google.com/spreadsheets/d/' + ID_SHEET + '/edit#gid=0', 'An'],
+            ['ja', 'excel-lijst', 'Een Excel', 'https://drive.google.com/file/d/' + ID_EXCEL + '/view?usp=sharing', ''],
+            ['nee', 'uit', 'Uitgeschakeld', 'https://docs.google.com/spreadsheets/d/' + ID_SHEET + '/edit', ''],
+            ['ja', 'geen-toegang', 'x', 'https://docs.google.com/spreadsheets/d/OnbekendBestand_cccccccccc/edit', ''],
+            ...extraRijen
+        ]
+    });
+    const sjabloon = () => new NepSpreadsheet(JSON.parse(fs.readFileSync(SJABLOON, 'utf8')));
+    const excelVersie = () => {
+        const bladen = JSON.parse(fs.readFileSync(SJABLOON, 'utf8'));
+        const links = bladen.find((b) => b.naam === 'Links');
+        links.tonen[1][6] = 'ja'; // eerste voorbeeld: vrij te delen
+        links.tonen[1][0] = 'Uit de Excel-lijst';
+        return new NepSpreadsheet(bladen);
+    };
+    const extra = {
+        drive: {
+            [ID_SHEET]: { mime: 'application/vnd.google-apps.spreadsheet', ss: sjabloon(), naam: 'Leerlijn alfa' },
+            [ID_EXCEL]: { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', naam: 'lijst.xlsx' }
+        },
+        omzetting: excelVersie,
+        antwoorden: []
+    };
+    return { ss, extra, be: laadBackend(ss, extra) };
+}
+
+test('Lijsten: elke lijst een eigen catalogus, instellingen en cache', () => {
+    const { be } = maakCentraal();
+    const json = (u) => JSON.parse(u.tekst);
+    const get = (p) => json(be.doGet({ parameter: p }));
+
+    const info = get({ actie: 'info', lijst: 'leerlijn' });
+    assert.equal(info.ok, true, JSON.stringify(info));
+    assert.equal(info.titel, 'Mijn digitale oefeningen', 'titel uit de sheet van de lijst');
+    assert.equal(get({ actie: 'info' }).titel, 'Digitale oefeningen', 'zonder lijst: de eigen titel');
+
+    const lijst = get({ actie: 'catalogus', lijst: 'LEERLIJN' });
+    assert.equal(lijst.items.length, 2);
+    assert.equal(lijst.problemen, undefined);
+    assert.equal(lijst.instellingen, undefined, 'instellingen niet naar de website');
+    assert.equal(get({ actie: 'catalogus' }).items.length, 4111, 'eigen lijst blijft ongewijzigd');
+    assert.ok(be.__cache.get('cat_leerlijn_index') && be.__cache.get('cat_eigen_index'), 'aparte cache per lijst');
+
+    // Excel-bestand op Drive: omgezet en opgeruimd
+    const excel = get({ actie: 'catalogus', lijst: 'excel-lijst' });
+    assert.equal(excel.items[0].titel, 'Uit de Excel-lijst');
+    assert.equal(be.__prullenbak.length, 1, 'tijdelijk omgezet bestand weggegooid');
+
+    // Niet toegelaten
+    assert.match(get({ actie: 'catalogus', lijst: 'uit' }).fout, /bestaat niet/);
+    assert.match(get({ actie: 'catalogus', lijst: 'verzonnen' }).fout, /bestaat niet/);
+    assert.match(get({ actie: 'catalogus', lijst: 'geen-toegang' }).fout, /Geen toegang/);
+
+    // Deelbaar item van een lijst: alleen binnen die lijst
+    const deelbaar = excel.items.find((i) => i.deelbaar);
+    assert.ok(deelbaar);
+    assert.equal(get({ actie: 'item', id: deelbaar.id, lijst: 'excel-lijst' }).ok, true);
+    assert.equal(get({ actie: 'item', id: deelbaar.id }).ok, false, 'niet via de eigen lijst');
+
+    // Controle
+    const controle = get({ actie: 'controle', lijst: 'leerlijn' });
+    assert.equal(controle.ok, true);
+    assert.equal(controle.items, 2);
+    assert.deepEqual(controle.problemen.length, 0);
+
+    // Vernieuwen: niet binnen de minuut, wel daarna
+    assert.equal(get({ actie: 'vernieuw', lijst: 'leerlijn' }).vernieuwd, false);
+    const sleutel = 'cat_leerlijn_index';
+    const index = JSON.parse(be.__cache.get(sleutel));
+    index.gemaakt = new Date(Date.now() - 120000).toISOString();
+    be.__cache.put(sleutel, JSON.stringify(index));
+    assert.equal(get({ actie: 'vernieuw', lijst: 'leerlijn' }).vernieuwd, true);
+    assert.equal(be.__cache.get(sleutel), null);
+});
+
+test('Lijsten: menu "Lijst toevoegen" en "Controle van een lijst"', () => {
+    const { ss, extra, be } = maakCentraal();
+    const lijsten = () => ss.getSheetByName('Lijsten').tonen;
+
+    extra.antwoorden.push('https://docs.google.com/spreadsheets/d/' + ID_SHEET + '/edit', 'Nieuwe Lijst!');
+    be.menuLijstToevoegen();
+    const laatste = lijsten().at(-1);
+    assert.deepEqual([laatste[0], laatste[1], laatste[2]], ['ja', 'nieuwe-lijst', 'Leerlijn alfa']);
+    assert.match(ss.meldingen.at(-1), /Items: 2/);
+
+    // Dezelfde code nog eens → geweigerd
+    const aantal = lijsten().length;
+    extra.antwoorden.push('https://docs.google.com/spreadsheets/d/' + ID_SHEET + '/edit', 'nieuwe-lijst');
+    be.menuLijstToevoegen();
+    assert.equal(lijsten().length, aantal);
+    assert.match(ss.meldingen.at(-1), /bestaat al/);
+
+    // Geen toegang → duidelijke melding, niets toegevoegd
+    extra.antwoorden.push('https://docs.google.com/spreadsheets/d/GeenToegangTotDit_dddddddd/edit');
+    be.menuLijstToevoegen();
+    assert.equal(lijsten().length, aantal);
+    assert.match(ss.meldingen.at(-1), /Geen toegang/);
+
+    // Annuleren → niets
+    be.menuLijstToevoegen();
+    assert.equal(lijsten().length, aantal);
+
+    extra.antwoorden.push('leerlijn');
+    be.menuLijstControle();
+    assert.match(ss.getSheetByName('Controle').tonen[0][0], /lijst "leerlijn"/);
+});
+
+test('Zelf aanmelden via de website', () => {
+    const { ss, extra, be } = maakCentraal();
+    const json = (u) => JSON.parse(u.tekst);
+    const post = (o) => json(be.doPost({ postData: { contents: JSON.stringify({ actie: 'aanmelden', ...o }) } }));
+    const info = json(be.doGet({ parameter: { actie: 'aanmeldinfo' } }));
+    assert.deepEqual([info.ok, info.toegelaten, info.codeNodig, info.account], [true, true, false, 'beheer@voorbeeld.be']);
+
+    // Een tweede, nieuw gedeeld bestand
+    extra.drive.NieuweLijstVanAn_eeeeeeeeeeee = { mime: 'application/vnd.google-apps.spreadsheet', ss: new NepSpreadsheet(JSON.parse(fs.readFileSync(SJABLOON, 'utf8'))), naam: 'Leerlijn NT2' };
+    const link = 'https://docs.google.com/spreadsheets/d/NieuweLijstVanAn_eeeeeeeeeeee/edit#gid=0';
+
+    assert.match(post({ link, code: 'x', contact: 'An' }).fout, /3 tot 40/);
+    assert.match(post({ link, code: 'leerlijn', contact: 'An' }).fout, /al in gebruik/);
+    assert.match(post({ link, code: 'nt2-an' }).fout, /naam of e-mailadres/);
+    assert.match(post({ link: 'https://example.org', code: 'nt2-an', contact: 'An' }).fout, /geen geldige link/);
+    assert.match(post({ link: 'https://docs.google.com/spreadsheets/d/NietGedeeldMetOns_ffffffffff/edit', code: 'nt2-an', contact: 'An' }).fout, /Geen toegang/);
+    // Al bestaand bestand → bestaande code terug
+    const dubbel = post({ link: 'https://docs.google.com/spreadsheets/d/' + ID_SHEET + '/edit', code: 'nog-eens', contact: 'An' });
+    assert.equal(dubbel.code, 'leerlijn');
+
+    const ok = post({ link, code: 'NT2 An', contact: 'An Peeters' });
+    assert.equal(ok.ok, true, JSON.stringify(ok));
+    assert.deepEqual([ok.code, ok.items, ok.titel], ['nt2-an', 2, 'Mijn digitale oefeningen']);
+    const rij = ss.getSheetByName('Lijsten').tonen.at(-1);
+    assert.deepEqual(rij.slice(0, 3), ['ja', 'nt2-an', 'Leerlijn NT2']);
+    assert.match(rij[4], /An Peeters \(aangemeld/);
+    // De lijst werkt meteen
+    assert.equal(json(be.doGet({ parameter: { actie: 'catalogus', lijst: 'nt2-an' } })).items.length, 2);
+
+    // Lege lijst (geen Website-tabblad) → geweigerd
+    const leeg = JSON.parse(fs.readFileSync(SJABLOON, 'utf8')).filter((b) => b.naam !== 'Website');
+    extra.drive.LegeLijstZonderWeb_gggggggggggg = { mime: 'application/vnd.google-apps.spreadsheet', ss: new NepSpreadsheet(leeg), naam: 'Leeg' };
+    assert.match(post({ link: 'https://docs.google.com/spreadsheets/d/LegeLijstZonderWeb_gggggggggggg/edit', code: 'leeg', contact: 'B' }).fout, /Website/);
+
+    // Aanmeldcode en uitzetten
+    ss.voegBladToe({ naam: 'Website-instellingen', verborgen: false, tonen: [['Instelling', 'Waarde'], ['Aanmeldcode', 'geheim123']] });
+    assert.equal(json(be.doGet({ parameter: { actie: 'aanmeldinfo' } })).codeNodig, true);
+    assert.match(post({ link, code: 'andere', contact: 'An' }).fout, /aanmeldcode klopt niet/);
+    ss.getSheetByName('Website-instellingen').tonen.push(['Aanmelden via de website', 'nee']);
+    assert.match(post({ link, code: 'andere', contact: 'An', aanmeldcode: 'geheim123' }).fout, /staat uit/);
 });

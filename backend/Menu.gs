@@ -16,20 +16,25 @@ function onOpen() {
         .addSeparator()
         .addItem('Controle uitvoeren', 'menuControle')
         .addItem('Website nu vernieuwen', 'menuVernieuwen')
+        .addSeparator()
+        .addSubMenu(SpreadsheetApp.getUi().createMenu('Lijsten van anderen')
+            .addItem('Lijst toevoegen…', 'menuLijstToevoegen')
+            .addItem('Controle van een lijst…', 'menuLijstControle')
+            .addItem('Alle lijsten vernieuwen', 'menuLijstenVernieuwen'))
         .addToUi();
 }
 
 /** Bij elke wijziging in de sheet: cache leegmaken, zodat de website meteen de nieuwe versie toont. */
 function onEdit() {
     try {
-        leegCache();
+        leegCache('');
     } catch (fout) {
         // Een fout hier mag het bewerken van de sheet nooit hinderen.
     }
 }
 
 function menuVernieuwen() {
-    leegCache();
+    leegCache('');
     SpreadsheetApp.getActive().toast('De website toont bij de volgende keer laden de nieuwste gegevens.', 'Website', 5);
 }
 
@@ -113,7 +118,7 @@ function raadBronnen(ss) {
     var GEEN_LINK = /(hulp|qr|insluit|kopieer|code|klad|omzetting)/;
     var FILTER = /^(thema|niveau|vaardigheid|programma|type|soort|kern|boekje|sterren|module|categorie)/;
     var OMSCHRIJVING = /(omschrijving|beschrijving|uitleg)/;
-    var overslaan = [TAB_BRONNEN, TAB_INSTELLINGEN, TAB_CONTROLE];
+    var overslaan = [TAB_BRONNEN, TAB_INSTELLINGEN, TAB_CONTROLE, TAB_LIJSTEN];
     var voorstel = [];
 
     ss.getSheets().forEach(function (blad) {
@@ -231,7 +236,12 @@ function menuKolommenToevoegen() {
 
 function menuControle() {
     var ss = SpreadsheetApp.getActive();
-    var catalogus = bouwCatalogus(ss);
+    schrijfControle(ss, bouwCatalogus(ss), 'deze sheet');
+    leegCache('');
+}
+
+/** Schrijft het controlerapport in het tabblad "Controle" van deze sheet. */
+function schrijfControle(ss, catalogus, over) {
     var blad = ss.getSheetByName(TAB_CONTROLE) || ss.insertSheet(TAB_CONTROLE);
     blad.clear();
 
@@ -239,7 +249,7 @@ function menuControle() {
         return i.deelbaar;
     }).length;
     var samenvatting = [
-        ['Controle van ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm'), '', '', '', '', ''],
+        ['Controle van ' + over + ' — ' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'dd/MM/yyyy HH:mm'), '', '', '', '', ''],
         ['Items op de website: ' + catalogus.items.length + ' — waarvan vrij te delen: ' + deelbaar +
             ' — meldingen: ' + catalogus.problemen.length, '', '', '', '', ''],
         ['', '', '', '', '', ''],
@@ -258,5 +268,85 @@ function menuControle() {
     blad.setColumnWidth(5, 420);
     blad.setColumnWidth(6, 360);
     ss.setActiveSheet(blad);
-    leegCache();
+}
+
+// ---------------------------------------------------------------------------
+// Lijsten van anderen (zie Lijsten.gs)
+// ---------------------------------------------------------------------------
+
+/** Vraagt iets via een venstertje; geeft null terug bij Annuleren. */
+function vraag(titel, tekst) {
+    var ui = SpreadsheetApp.getUi();
+    var antwoord = ui.prompt(titel, tekst, ui.ButtonSet.OK_CANCEL);
+    if (antwoord.getSelectedButton() !== ui.Button.OK) {
+        return null;
+    }
+    return antwoord.getResponseText().trim();
+}
+
+function menuLijstToevoegen() {
+    var ui = SpreadsheetApp.getUi();
+    var ss = SpreadsheetApp.getActive();
+
+    var link = vraag('Lijst toevoegen (1/2)',
+        'Plak de link naar de Google Sheet of het Excel-bestand op Google Drive.\n' +
+        'De eigenaar moet het eerst delen met dit account (lezen volstaat).');
+    if (!link) return;
+
+    // Eerst proberen te openen en in te lezen: zo weet je meteen of alles klopt.
+    var bron;
+    var catalogus;
+    try {
+        bron = openBestand(link);
+        catalogus = bouwCatalogus(bron.spreadsheet);
+    } catch (fout) {
+        ui.alert('Lijst toevoegen', 'Dat lukte niet:\n' + fout.message, ui.ButtonSet.OK);
+        return;
+    } finally {
+        if (bron) bron.opruimen();
+    }
+
+    var code = normaliseerLijstCode(vraag('Lijst toevoegen (2/2)',
+        'Geef een korte code voor deze lijst (kleine letters, geen spaties), bv. leerlijn-alfa.\n' +
+        'De lijst komt dan op het adres van de website met ?lijst=<code> erachter.'));
+    if (!code) return;
+    if (leesLijsten(ss).some(function (l) { return l.code === code; })) {
+        ui.alert('Lijst toevoegen', 'De code "' + code + '" bestaat al. Kies een andere code.', ui.ButtonSet.OK);
+        return;
+    }
+
+    var blad = ss.getSheetByName(TAB_LIJSTEN) || maakLijstenTabblad(ss);
+    blad.getRange(blad.getLastRow() + 1, 1, 1, LIJST_KOLOMMEN.length)
+        .setValues([['ja', code, bron.naam || '', link, '']]);
+
+    var adres = leesInstellingen(ss).websiteAdres;
+    var ernstig = catalogus.problemen.filter(function (p) {
+        return /niet gevonden|bestaat niet|ontbreekt/.test(p.probleem);
+    });
+    ui.alert('Lijst toegevoegd',
+        'Code: ' + code + '\nItems: ' + catalogus.items.length + '\nMeldingen: ' + catalogus.problemen.length +
+        (ernstig.length ? '\n\nLET OP:\n' + ernstig.slice(0, 5).map(function (p) { return p.probleem; }).join('\n') : '') +
+        '\n\nAdres: ' + (adres ? adres.replace(/\/?$/, '/') + '?lijst=' + code : '(adres van de website)?lijst=' + code),
+        ui.ButtonSet.OK);
+}
+
+function menuLijstControle() {
+    var ui = SpreadsheetApp.getUi();
+    var code = normaliseerLijstCode(vraag('Controle van een lijst', 'Code van de lijst (zie tabblad Lijsten):'));
+    if (!code) return;
+    try {
+        leegCache(code);
+        schrijfControle(SpreadsheetApp.getActive(), haalCatalogus(code), 'lijst "' + code + '"');
+    } catch (fout) {
+        ui.alert('Controle', fout.message, ui.ButtonSet.OK);
+    }
+}
+
+function menuLijstenVernieuwen() {
+    var ss = SpreadsheetApp.getActive();
+    leegCache('');
+    leesLijsten(ss).forEach(function (l) {
+        leegCache(l.code);
+    });
+    ss.toast('Alle lijsten tonen bij de volgende keer laden de nieuwste gegevens.', 'Website', 5);
 }

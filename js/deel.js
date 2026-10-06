@@ -3,6 +3,7 @@
  */
 import { CONFIG } from './config.js';
 import { el, icoon, kopieer, melding } from './hulp.js';
+import { huidigeLijst } from './api.js';
 import qrcode from '../lib/qrcode.mjs';
 
 /** Het adres van de cursistenpagina voor één item. Bevat alleen een code, niet de echte link. */
@@ -10,6 +11,9 @@ export function deellink(item) {
     const basis = CONFIG.kijkAdres ? new URL(CONFIG.kijkAdres) : new URL('kijk/', window.location.href);
     basis.hash = '';
     basis.search = '';
+    if (huidigeLijst()) {
+        basis.searchParams.set('lijst', huidigeLijst());
+    }
     basis.searchParams.set('id', item.id);
     return basis.href;
 }

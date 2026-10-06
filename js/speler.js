@@ -2,7 +2,7 @@
  * speler.js — speelt een item af in een container (gebruikt door beide pagina's).
  *
  * YouTube krijgt een speciale behandeling via de officiële YouTube-speler-API:
- * bij pauze en aan het einde leggen we ons eigen scherm over de video.
+ * bij pauze en aan het einde vervangen we de speler door ons eigen scherm (zie speelYouTube).
  * Zo zien cursisten niet de "meer video's"-suggesties van YouTube.
  * (Reclame kunnen we niet tegenhouden: die hangt af van de eigenaar van de video.)
  */
@@ -77,40 +77,49 @@ export function speelAf(doos, item) {
     return { stop: () => doos.replaceChildren() };
 }
 
-function speelYouTube(doos, item) {
-    const plek = el('div', { class: 'yt-plek' });
-    const afdek = el('button', { class: 'afdek', type: 'button', hidden: true });
-    doos.append(plek, afdek);
+/**
+ * YouTube, binnen de regels van YouTube.
+ *
+ * YouTube verbiedt om iets VÓÓR de ingesloten speler te leggen ("Required Minimum Functionality",
+ * Overlays and frames). Daarom leggen we bij pauze en aan het einde niets over de video,
+ * maar halen we de speler WEG en tonen we in de plaats ons eigen scherm.
+ * We onthouden waar de video was; "Verder kijken" maakt een nieuwe speler die daar verder gaat.
+ *
+ * Bij pauze wachten we even: wie de video kort stopt of met het tijdsbalkje schuift,
+ * merkt er niets van.
+ */
+const WACHT_BIJ_PAUZE = 1500; // milliseconden
 
+function speelYouTube(doos, item) {
     let speler = null;
     let gestopt = false;
+    let pauzeTimer = null;
     const videoId = item.embed.split('/embed/')[1];
     const eigenSchermknop = volledigSchermMogelijk();
 
-    function toonAfdek(soort) {
-        afdek.hidden = false;
-        afdek.innerHTML = soort === 'einde'
-            ? icoon('opnieuw', 'groot-icoon') + '<span>Opnieuw bekijken</span>'
-            : icoon('play', 'groot-icoon') + '<span>Verder kijken</span>';
-        afdek.dataset.soort = soort;
+    function ruimSpelerOp() {
+        clearTimeout(pauzeTimer);
+        if (speler && speler.destroy) {
+            speler.destroy();
+        }
+        speler = null;
     }
 
-    afdek.addEventListener('click', () => {
-        if (!speler) return;
-        if (afdek.dataset.soort === 'einde') {
-            speler.seekTo(item.start || 0, true);
-        }
-        speler.playVideo();
-        afdek.hidden = true;
-    });
+    /** Ons eigen scherm, IN DE PLAATS VAN de speler (niet erover). */
+    function toonEigenScherm(soort, verderVanaf) {
+        ruimSpelerOp();
+        const knop = el('button', { class: 'eigen-scherm', type: 'button' });
+        knop.innerHTML = soort === 'einde'
+            ? icoon('opnieuw', 'groot-icoon') + '<span>Opnieuw bekijken</span>'
+            : icoon('play', 'groot-icoon') + '<span>Verder kijken</span>';
+        knop.addEventListener('click', () => maakSpeler(soort === 'einde' ? (item.start || 0) : verderVanaf, true));
+        doos.replaceChildren(knop);
+        knop.focus();
+    }
 
-    laadYouTubeApi().then((gelukt) => {
-        if (gestopt) return;
-        if (!gelukt) {
-            // Zonder API: gewone ingesloten speler (dan zonder afdekscherm).
-            plek.replaceWith(iframe(item.embed + '?rel=0&iv_load_policy=3&start=' + (item.start || 0), item.titel));
-            return;
-        }
+    function maakSpeler(vanaf, meteenAfspelen) {
+        const plek = el('div', { class: 'yt-plek' });
+        doos.replaceChildren(plek);
         speler = new window.YT.Player(plek, {
             host: 'https://www.youtube-nocookie.com',
             videoId,
@@ -118,26 +127,48 @@ function speelYouTube(doos, item) {
                 rel: 0,
                 iv_load_policy: 3,
                 playsinline: 1,
-                start: item.start || 0,
-                // Eigen knop voor volledig scherm (zodat ons afdekscherm meegaat);
+                start: Math.floor(vanaf || 0),
+                autoplay: meteenAfspelen ? 1 : 0,
+                // Eigen knop voor volledig scherm (zodat ons scherm na pauze ook op volledig scherm blijft);
                 // op toestellen zonder die mogelijkheid (iPhone) de knop van YouTube.
                 fs: eigenSchermknop ? 0 : 1
             },
             events: {
+                onReady: (e) => {
+                    if (meteenAfspelen) e.target.playVideo();
+                },
                 onStateChange: (e) => {
                     const S = window.YT.PlayerState;
-                    if (e.data === S.ENDED) toonAfdek('einde');
-                    else if (e.data === S.PAUSED) toonAfdek('pauze');
-                    else if (e.data === S.PLAYING) afdek.hidden = true;
+                    clearTimeout(pauzeTimer);
+                    if (e.data === S.ENDED) {
+                        toonEigenScherm('einde');
+                    } else if (e.data === S.PAUSED) {
+                        const speelt = e.target;
+                        pauzeTimer = setTimeout(() => {
+                            if (!gestopt && speelt.getPlayerState() === S.PAUSED) {
+                                toonEigenScherm('pauze', speelt.getCurrentTime());
+                            }
+                        }, WACHT_BIJ_PAUZE);
+                    }
                 }
             }
         });
+    }
+
+    laadYouTubeApi().then((gelukt) => {
+        if (gestopt) return;
+        if (!gelukt) {
+            // Zonder de API van YouTube: gewone ingesloten speler (dan zonder eigen scherm).
+            doos.replaceChildren(iframe(item.embed + '?rel=0&iv_load_policy=3&start=' + (item.start || 0), item.titel));
+            return;
+        }
+        maakSpeler(item.start || 0, false);
     });
 
     return {
         stop: () => {
             gestopt = true;
-            if (speler && speler.destroy) speler.destroy();
+            ruimSpelerOp();
             doos.replaceChildren();
         }
     };

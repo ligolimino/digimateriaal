@@ -16,6 +16,17 @@ export function beeld(item) {
     if (item.thumb) {
         const img = el('img', { src: item.thumb, alt: '', loading: 'lazy', decoding: 'async' });
         img.addEventListener('error', () => img.replaceWith(plaatsvervanger(item)), { once: true });
+        // Sommige diensten geven een standaardplaatje in plaats van een fout:
+        //   ThingLink: een grijs icoon van 512×512 (echte afbeeldingen zijn 1024 breed);
+        //   YouTube: een grijs vlak van 120×90 als de video verwijderd of privé is.
+        img.addEventListener('load', () => {
+            const b = img.naturalWidth;
+            const h = img.naturalHeight;
+            if ((item.programma === 'ThingLink' && b === 512 && h === 512) ||
+                (item.programma === 'YouTube' && b === 120 && h === 90)) {
+                img.replaceWith(plaatsvervanger(item));
+            }
+        }, { once: true });
         doos.append(img);
     } else {
         doos.append(plaatsvervanger(item));

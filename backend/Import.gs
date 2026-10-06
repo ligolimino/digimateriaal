@@ -43,7 +43,7 @@ function importeerExcel(bestandsnaam, base64) {
     var verslag = [];
     try {
         var bron = SpreadsheetApp.openById(tijdelijkId);
-        var overslaan = [TAB_BRONNEN, TAB_INSTELLINGEN, TAB_CONTROLE];
+        var overslaan = [TAB_BRONNEN, TAB_INSTELLINGEN, TAB_CONTROLE, TAB_LIJSTEN];
         var namenInExcel = [];
 
         bron.getSheets().forEach(function (blad) {
@@ -70,7 +70,7 @@ function importeerExcel(bestandsnaam, base64) {
     }
 
     noteerImport(doel, bestandsnaam);
-    leegCache();
+    leegCache('');
 
     var catalogus = bouwCatalogus(doel);
     var ernstig = catalogus.problemen.filter(function (p) {

@@ -5,12 +5,13 @@
  *   1. start()         gegevens ophalen (eventueel na login)
  *   2. gebruik()       een catalogus in gebruik nemen
  *   3. toon()          alles tekenen op basis van de toestand (zoekterm, filters, ...)
- *   4. gebeurtenissen  klikken en typen passen de toestand aan en roepen toon() aan
+ *   4. controle        meldingen tonen en gegevens vernieuwen (voor wie de lijst bijhoudt)
+ *   5. gebeurtenissen  klikken en typen passen de toestand aan en roepen toon() aan
  *
  * Er is één toestand en één functie die tekent: zo kunnen zoeken en filteren
  * elkaar nooit meer tegenwerken, zoals in de oude pagina's.
  */
-import { haalInfo, haalCatalogus, leesBewaardeCatalogus, bewaarCatalogus } from './api.js';
+import { haalInfo, haalCatalogus, haalControle, vernieuw, leesBewaardeCatalogus, bewaarCatalogus } from './api.js';
 import { startLogin, haalToken, gebruikersnaam, uitloggen } from './auth.js';
 import {
     bereidVoor, filterEnSorteer, opties, zichtbareFilters, populairsteWaarden,
@@ -30,6 +31,7 @@ let toestand = adresNaarToestand(window.location.hash);
 let resultaten = [];
 let getoond = 0;
 let huidigeSpeler = null;
+let token = null; // toegangssleutel bij login (anders null)
 
 // ---------------------------------------------------------------------------
 // 1. Starten
@@ -62,7 +64,7 @@ async function start() {
     try {
         if (info.loginVerplicht) {
             await startLogin();
-            const token = await haalToken();
+            token = await haalToken();
             toonGebruiker();
             vers = await haalCatalogus(token);
         } else {
@@ -148,6 +150,8 @@ function toonCollecties() {
         }
     }, label, el('span', { class: 'teller' }, aantal.toLocaleString('nl-BE')));
 
+    // Maar één collectie? Dan zijn de knoppen overbodig.
+    $('collecties').hidden = catalogus.collecties.length <= 1;
     $('collecties').replaceChildren(
         knop('', 'Alles', items.length),
         ...catalogus.collecties.map((c) => knop(c.naam, c.naam, c.aantal))
@@ -292,7 +296,56 @@ function sluitSpeler() {
 }
 
 // ---------------------------------------------------------------------------
-// 4. Gebeurtenissen
+// 4. Voor wie de lijst bijhoudt: controle en vernieuwen
+// ---------------------------------------------------------------------------
+
+async function toonControle() {
+    const venster = $('controlevenster');
+    const inhoud = $('controle-inhoud');
+    inhoud.replaceChildren(el('p', { class: 'uitleg' }, 'Bezig met controleren…'));
+    venster.showModal();
+    try {
+        const c = await haalControle(token);
+        const gemaakt = new Date(c.gemaakt).toLocaleString('nl-BE');
+        const kop = el('p', { class: 'uitleg' },
+            c.items + ' items op de website. ' +
+            (c.problemen.length ? c.problemen.length + ' meldingen:' : 'Geen meldingen: alles in orde!') +
+            ' (gegevens van ' + gemaakt + ')');
+        if (!c.problemen.length) {
+            inhoud.replaceChildren(kop);
+            return;
+        }
+        const tabel = el('table', { class: 'controle-tabel' },
+            el('thead', {}, el('tr', {}, ['Tabblad', 'Rij', 'Titel', 'Melding'].map((t) => el('th', {}, t)))),
+            el('tbody', {}, c.problemen.map((p) => el('tr', {},
+                el('td', {}, p.tabblad || ''),
+                el('td', {}, String(p.rij || '')),
+                el('td', {}, p.titel || ''),
+                el('td', {}, p.probleem)
+            )))
+        );
+        inhoud.replaceChildren(kop, el('div', { class: 'tabel-doos' }, tabel));
+    } catch (fout) {
+        inhoud.replaceChildren(el('p', { class: 'status-fout' }, fout.message));
+    }
+}
+
+async function vernieuwGegevens() {
+    try {
+        const r = await vernieuw();
+        if (!r.vernieuwd) {
+            melding('De gegevens zijn minder dan een minuut oud. Probeer zo dadelijk opnieuw.');
+            return;
+        }
+        melding('De nieuwste gegevens worden opgehaald…');
+        gebruik(await haalCatalogus(token));
+    } catch (fout) {
+        melding(fout.message);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// 5. Gebeurtenissen
 // ---------------------------------------------------------------------------
 
 function koppelGebeurtenissen() {
@@ -314,6 +367,12 @@ function koppelGebeurtenissen() {
     });
 
     $('uitloggen').addEventListener('click', uitloggen);
+
+    // Controle en vernieuwen
+    $('controle-knop').addEventListener('click', toonControle);
+    $('vernieuw-knop').addEventListener('click', vernieuwGegevens);
+    $('controle-sluit').innerHTML = icoon('sluit');
+    $('controle-sluit').addEventListener('click', () => $('controlevenster').close());
 
     // Speler
     $('speler-sluit').innerHTML = icoon('sluit');

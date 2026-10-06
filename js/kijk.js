@@ -20,15 +20,17 @@ function toonFout(tekst) {
 }
 
 async function start() {
-    const id = new URLSearchParams(window.location.search).get('id');
-    if (!id) {
+    const parameters = new URLSearchParams(window.location.search);
+    const id = parameters.get('id');
+    const oudeLink = parameters.get('v'); // links van de vorige cursistenpagina: ?v=<YouTube-ID>
+    if (!id && !oudeLink) {
         toonFout('Deze link is niet volledig.');
         return;
     }
 
     let item;
     try {
-        item = (await haalItem(id)).item;
+        item = (await haalItem(id ? { id } : { v: oudeLink })).item;
     } catch (fout) {
         toonFout(fout.message);
         return;

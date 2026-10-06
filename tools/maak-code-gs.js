@@ -14,7 +14,7 @@ const path = require('path');
 
 const map = path.join(__dirname, '..', 'backend');
 const doel = path.join(__dirname, '..', 'apps-script', 'Code.gs');
-const volgorde = ['Api.gs', 'Instellingen.gs', 'Bronnen.gs', 'Links.gs', 'Cache.gs', 'Login.gs', 'Menu.gs', 'Import.gs'];
+const volgorde = ['Api.gs', 'Instellingen.gs', 'Bronnen.gs', 'Links.gs', 'Cache.gs', 'Login.gs', 'Menu.gs', 'Import.gs', 'Lijsten.gs'];
 
 const versie = fs.readFileSync(path.join(map, 'Api.gs'), 'utf8').match(/var VERSIE = '([^']+)'/)[1];
 let inhoud = [

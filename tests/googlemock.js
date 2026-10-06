@@ -185,11 +185,25 @@ function laadBackend(spreadsheet, extra = {}) {
                 }
             }
         },
-        DriveApp: { getFileById: (id) => ({ setTrashed: (j) => { if (j) prullenbak.push(id); } }) },
+        // Nep-Google Drive: tijdelijke omgezette bestanden + bestanden die de test klaarzet (extra.drive).
+        DriveApp: {
+            getFileById: (id) => {
+                const bestand = (extra.drive || {})[id];
+                if (!bestand && !bestanden.has(id)) {
+                    throw new Error('Bestand niet gevonden of geen toegang: ' + id);
+                }
+                return {
+                    setTrashed: (j) => { if (j) prullenbak.push(id); },
+                    getMimeType: () => bestand.mime,
+                    getName: () => bestand.naam || id,
+                    getBlob: () => ({ bestandId: id })
+                };
+            }
+        },
         console,
         SpreadsheetApp: {
             getActive: () => spreadsheet,
-            openById: (id) => bestanden.get(id),
+            openById: (id) => bestanden.get(id) || ((extra.drive || {})[id] || {}).ss,
             newRichTextValue: () => {
                 const w = { tekst: '', link: null };
                 const b = {
@@ -200,9 +214,14 @@ function laadBackend(spreadsheet, extra = {}) {
                 return b;
             },
             getUi: () => ({
-                ButtonSet: { OK: 'OK' },
+                ButtonSet: { OK: 'OK', OK_CANCEL: 'OK_CANCEL' },
                 alert: (titel, tekst) => spreadsheet.meldingen.push(tekst),
-                createMenu: () => { const m = { addItem: () => m, addSeparator: () => m, addToUi: () => m }; return m; }
+                createMenu: () => { const m = { addItem: () => m, addSeparator: () => m, addSubMenu: () => m, addToUi: () => m }; return m; },
+                Button: { OK: 'OK', CANCEL: 'CANCEL' },
+                prompt: () => {
+                    const tekst = (extra.antwoorden || []).shift();
+                    return { getSelectedButton: () => (tekst === undefined ? 'CANCEL' : 'OK'), getResponseText: () => tekst || '' };
+                }
             }),
             newDataValidation: () => {
                 const b = { requireValueInList: (l) => { b.lijst = l; return b; }, setAllowInvalid: () => b, build: () => ({ lijst: b.lijst }) };
@@ -211,13 +230,13 @@ function laadBackend(spreadsheet, extra = {}) {
         },
         Utilities: maakUtilities(),
         CacheService: { getScriptCache: () => cache },
-        LockService: { getScriptLock: () => ({ tryLock: () => true, releaseLock: () => {} }) },
+        LockService: { getScriptLock: () => ({ tryLock: () => true, waitLock: () => {}, releaseLock: () => {} }) },
         ContentService: {
             MimeType: { JSON: 'json' },
             createTextOutput: (tekst) => ({ tekst, setMimeType() { return this; } })
         },
         UrlFetchApp: extra.UrlFetchApp || { fetch: () => { throw new Error('Geen netwerk in tests'); } },
-        Session: { getScriptTimeZone: () => 'Europe/Brussels' }
+        Session: { getScriptTimeZone: () => 'Europe/Brussels', getEffectiveUser: () => ({ getEmail: () => 'beheer@voorbeeld.be' }) }
     };
     vm.createContext(context);
     const map = path.join(__dirname, '..', 'backend');
