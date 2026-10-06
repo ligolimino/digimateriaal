@@ -42,6 +42,18 @@ zet ze dan op een plek met een openbare link.
 
 > **Is de bron een Excel-bestand?** Dan gelden andere regels: zie [7-EXCEL-ALS-BRON.md](7-EXCEL-ALS-BRON.md).
 
+## YouTube: wat kan en wat niet
+
+| Wens | Kan het? |
+|---|---|
+| Geen gerelateerde video's bij pauze en aan het einde | ✅ De website haalt de speler dan weg en toont een eigen scherm ("Verder kijken", "Opnieuw bekijken"). |
+| De deelknop, titel of "Bekijken op YouTube" verbergen | ❌ YouTube verbiedt om iets vóór de speler te leggen of onderdelen te verbergen. |
+| Reclame weghalen | Alleen bij eigen video's: zet het verdienen met reclame uit op het eigen kanaal. |
+| Video op **privé** zetten en alleen via de website tonen | ❌ Privévideo's kunnen niet ingesloten worden: ze spelen dan ook op de website niet af. |
+| Video op **niet vermeld** zetten | ✅ Speelt af op de website en is niet vindbaar op YouTube. De deelknop van YouTube blijft wel. |
+
+**Afspraak voor lesgevers:** deel altijd met de **oranje deelknop** van de website, niet met de knop van YouTube.
+
 ## Het tabblad "Website"
 
 Elke rij is een **bron**: één linkkolom uit één tabblad. Elke link wordt een kaart op de website.

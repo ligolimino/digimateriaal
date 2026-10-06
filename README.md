@@ -9,8 +9,9 @@ versie in (zie handleiding 7).
 
 | Pagina | Adres | Voor wie |
 |---|---|---|
-| Overzicht | `https://ligolimino.github.io/` | lesgevers (optioneel met Microsoft-login) |
-| Eén oefening | `https://ligolimino.github.io/kijk/?id=…` | cursisten (via de deelknop of QR-code) |
+| Overzicht | `https://ligolimino.github.io/digimateriaal/` | lesgevers (optioneel met Microsoft-login) |
+| Lijst van een collega | `https://ligolimino.github.io/digimateriaal/?lijst=…` | zie handleiding 9 |
+| Eén oefening | `https://nederlandsoefenen.github.io/nt2/?id=…` | cursisten (via de deelknop of QR-code) |
 
 ## Handleidingen
 
@@ -21,12 +22,15 @@ versie in (zie handleiding 7).
 5. [Overdracht — wat staat waar, en wat als het stopt?](handleiding/5-OVERDRACHT.md)
 6. [Uitleg bij de code](handleiding/6-CODE-UITLEG.md)
 7. [Een Excel-bestand als bron](handleiding/7-EXCEL-ALS-BRON.md)
+8. [De cursistenpagina op een apart adres](handleiding/8-APARTE-CURSISTENSITE.md)
+9. [Eén website, meerdere lijsten](handleiding/9-CENTRALE-LIJSTEN.md) — de eenvoudigste weg voor collega's
 
 ## Mappen
 
 ```
 index.html          lesgeverspagina
 kijk/index.html     cursistenpagina (bevat geen overzicht)
+aanmelden/          aanmeldpagina: collega's zetten zelf een lijst online (handleiding 9)
 css/stijl.css       opmaak van beide pagina's
 js/                 de code van de website (ES-modules, geen bouwstap)
   config.js         ← het enige bestand dat je per website invult
@@ -36,5 +40,7 @@ backend/            dezelfde backendcode, in losse bestanden (om te lezen en aan
 handleiding/        de handleidingen
 tests/              tests en testserver (zonder gegevens)
 tools/              maak-code-gs.js: voegt backend/ samen tot apps-script/Code.gs
+sjabloon/           Sjabloon-links-weergavewebsite.xlsx: de ideale brondata (handleiding 9)
+cursistensite/      index.html + robots.txt voor een cursistenpagina op een apart adres (handleiding 8)
 robots.txt          houdt zoekmachines weg van alles behalve de twee pagina's (die hebben zelf noindex)
 ```

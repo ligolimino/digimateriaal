@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>Zelf een overzicht online zetten</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap">
+    <link rel="stylesheet" href="../css/stijl.css">
+    <!-- Aanmeldpagina: een collega zet zelf een lijst online (zie handleiding 9). -->
+    <script type="module" src="../js/aanmelden.js"></script>
+</head>
+<body class="aanmelden">
+
+    <header class="bovenbalk">
+        <div class="merk">
+            <span class="merk-logo" aria-hidden="true">▶</span>
+            <div>
+                <p class="merk-titel">Zelf een overzicht online zetten</p>
+                <p class="merk-ondertitel">In vier stappen, zonder technische kennis</p>
+            </div>
+        </div>
+    </header>
+
+    <main class="pagina smal">
+
+        <div class="status" id="status" role="status"></div>
+
+        <ol class="stappen" id="stappen" hidden>
+            <li class="stap">
+                <h2>Download het sjabloon</h2>
+                <p>Een Excel-bestand met een voorbeeld en uitleg.</p>
+                <a class="knop knop-licht" href="../sjabloon/Sjabloon-links-weergavewebsite.xlsx" download>Sjabloon downloaden</a>
+            </li>
+            <li class="stap">
+                <h2>Vul het in en zet het op Google Drive</h2>
+                <p>Vul het tabblad <b>Links</b> in: één rij per link. Pas in <b>Website-instellingen</b> de titel aan.</p>
+                <ul class="uitleg-lijst">
+                    <li><b>Werk je in Google?</b> Zet het bestand op Google Drive, open het met Google Spreadsheets en kies <i>Bestand → Opslaan als Google Spreadsheets</i>.</li>
+                    <li><b>Werk je liever in Excel?</b> Zet het Excel-bestand op Google Drive. Bijwerken = in Drive een <i>nieuwe versie</i> van hetzelfde bestand uploaden.</li>
+                </ul>
+            </li>
+            <li class="stap">
+                <h2>Deel het met de website</h2>
+                <p>Klik in Google Drive op <b>Delen</b> en voeg dit account toe als <b>Lezer</b>:</p>
+                <div class="deel-rij">
+                    <input class="deel-link" id="account" type="text" readonly aria-label="Account om mee te delen">
+                    <button type="button" class="knop knop-licht" id="kopieer-account">Kopieer</button>
+                </div>
+            </li>
+            <li class="stap">
+                <h2>Zet je website online</h2>
+                <form id="formulier" class="formulier" novalidate>
+                    <label for="link">Link naar je Google Sheet of Excel-bestand</label>
+                    <input id="link" type="url" required placeholder="https://docs.google.com/spreadsheets/d/…">
+                    <p class="hulptekst">In Google Drive: rechtsklik op het bestand → <i>Delen → Link kopiëren</i>.</p>
+
+                    <label for="code">Korte naam voor het adres</label>
+                    <input id="code" type="text" required placeholder="bv. leerlijn-alfa" maxlength="40" autocomplete="off">
+                    <p class="hulptekst" id="voorbeeld-adres">Je website komt op: …</p>
+
+                    <label for="contact">Je naam of e-mailadres</label>
+                    <input id="contact" type="text" required maxlength="100" placeholder="Zodat de beheerder weet wie deze lijst bijhoudt">
+
+                    <div id="code-blok" hidden>
+                        <label for="aanmeldcode">Aanmeldcode</label>
+                        <input id="aanmeldcode" type="password" autocomplete="off">
+                        <p class="hulptekst">Die krijg je van de beheerder van de website.</p>
+                    </div>
+
+                    <button type="submit" class="knop knop-hoofd knop-groot" id="verstuur">Website aanmaken</button>
+                </form>
+                <div id="resultaat" class="resultaat" aria-live="polite"></div>
+            </li>
+        </ol>
+    </main>
+</body>
+</html>

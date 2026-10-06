@@ -1,5 +1,8 @@
 # 3. Een nieuwe weergavewebsite op basis van een andere sheet
 
+> **Eenvoudiger:** wil een collega gewoon een eigen overzicht, gebruik dan [9-CENTRALE-LIJSTEN.md](9-CENTRALE-LIJSTEN.md).
+> Dan is er geen eigen script en geen eigen GitHub-repo nodig. Deze handleiding is voor een volledig aparte website.
+
 Het script is een **sjabloon**: het werkt met elke Google Sheet met links.
 Programmeren is niet nodig.
 

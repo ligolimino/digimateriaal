@@ -9,6 +9,8 @@ Dit document is bedoeld voor wie de website overneemt.
 | Google Sheet | Google Drive | Ligo-Google-account | De gegevens. Hier worden links bijgehouden (of: een kopie van een Excel-bestand, zie handleiding 7). |
 | Script (backend) | In de sheet: *Extensies → Apps Script* | idem | Geeft de gegevens door aan de website. |
 | Website (frontend) | GitHub: repo `ligolimino.github.io` | Ligo-GitHub-account | De pagina's voor lesgevers en cursisten. |
+| Lijsten van collega's (optioneel) | Tabblad *Lijsten* in de centrale sheet; de lijsten zelf bij hun eigenaar, gedeeld met het Ligo-account | eigenaar van elke lijst | Zie handleiding 9. Kolom *Contactpersoon* zegt wie wat bijhoudt. |
+| Cursistenpagina op apart adres (optioneel) | GitHub: bv. `nederlandsoefenen/nt2` | Ligo-GitHub-account | Toont één gedeelde oefening (handleiding 8). |
 | Login (optioneel) | Microsoft Entra ID van Ligo | Ligo-IT | Laat lesgevers inloggen. |
 
 **Niets hangt af van een persoonlijk account.** Er zijn geen betalende diensten, geen wachtwoorden of sleutels

@@ -90,6 +90,10 @@ Staat er bovenaan *"Kolom … niet gevonden"* of *"Tabblad … bestaat niet"*, v
 5. Klik op **Implementeren** (en geef toestemming als dat gevraagd wordt).
 6. Kopieer de **URL van de web-app**. Die eindigt op `/exec`.
 
+> ⚠️ Kopieer de **URL van de web-app** (begint met `https://script.google.com/macros/s/` en eindigt op `/exec`).
+> **Niet** de bibliotheek-URL, niet de implementatie-ID, en niet het adres van de editor.
+> Kwijt? *Implementeren → Implementaties beheren* → klik op de implementatie → **Web-app → URL**.
+
 > Test: plak die URL in je browser en zet er `?actie=info` achter. Je ziet dan iets als
 > `{"ok":true,"titel":"Digitale oefeningen",...}`.
 

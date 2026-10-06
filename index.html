@@ -81,6 +81,21 @@
         </div>
     </main>
 
+    <footer class="voet">
+        <button type="button" class="tekstknop" id="vernieuw-knop">Gegevens vernieuwen</button>
+        <button type="button" class="tekstknop" id="controle-knop">Controle van deze lijst</button>
+        <a class="tekstknop" href="aanmelden/">Zelf een lijst online zetten</a>
+    </footer>
+
+    <!-- Venster met de meldingen van de controle (voor wie de lijst bijhoudt) -->
+    <dialog class="venster controlevenster" id="controlevenster" aria-labelledby="controle-titel">
+        <div class="venster-kop">
+            <h2 id="controle-titel">Controle van deze lijst</h2>
+            <button type="button" class="knop-icoon" id="controle-sluit" aria-label="Sluiten"></button>
+        </div>
+        <div class="controle-inhoud" id="controle-inhoud"></div>
+    </dialog>
+
     <!-- Venster om een video, audio of e-learning af te spelen -->
     <dialog class="venster spelervenster" id="spelervenster" aria-labelledby="speler-titel">
         <div class="venster-kop">

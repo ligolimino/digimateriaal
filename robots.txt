@@ -10,6 +10,8 @@ Disallow: /backend/
 Disallow: /apps-script/
 Disallow: /tests/
 Disallow: /tools/
+Disallow: /cursistensite/
+Disallow: /sjabloon/
 Disallow: /lib/
 Disallow: /js/
 Disallow: /css/

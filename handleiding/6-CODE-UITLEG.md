@@ -52,6 +52,7 @@ zolang het dezelfde JSON teruggeeft.
 | `Login.gs` | Vraagt aan Microsoft van wie een toegangssleutel is |
 | `Menu.gs` | Het menu in de sheet, `onEdit` om de cache te legen |
 | `Import.gs` | Een Excel-bestand inladen: omzetten via Drive, tabbladen vervangen, verslag |
+| `Lijsten.gs` | Lijsten van anderen: tabblad *Lijsten* lezen, een Google Sheet of Excel op Drive openen |
 
 Een paar keuzes uitgelicht:
 
@@ -74,11 +75,12 @@ Een paar keuzes uitgelicht:
 | `catalogus.js` | Zoeken, filteren, sorteren: **pure functies**, geen HTML | lesgevers |
 | `hulp.js` | `el()` om veilig HTML te maken, iconen, kopiëren, meldingen | beide |
 | `kaarten.js` | Eén kaart tekenen | beide |
-| `speler.js` | Afspelen, met afdekscherm voor YouTube | beide |
+| `speler.js` | Afspelen; bij YouTube: speler vervangen door een eigen scherm bij pauze en einde | beide |
 | `deel.js` | Deelvenster met link en QR-code | lesgevers |
 | `auth.js` | Microsoft-login (MSAL), alleen geladen als nodig | lesgevers |
 | `lesgevers.js` | Brengt alles samen op de lesgeverspagina | `index.html` |
 | `kijk.js` | Brengt alles samen op de cursistenpagina | `kijk/index.html` |
+| `aanmelden.js` | De aanmeldpagina: formulier en resultaat | `aanmelden/index.html` |
 
 ### Toestand en tekenen
 
